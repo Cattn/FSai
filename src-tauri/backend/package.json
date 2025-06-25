@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "build-exe": "npm run build && npm run pkg-build",
+    "pkg-build": "pkg dist/server.js --targets node18-win-x64 --output ../binaries/server-x86_64-pc-windows-msvc.exe && pkg dist/server.js --targets node18-macos-x64 --output ../binaries/server-x86_64-apple-darwin && pkg dist/server.js --targets node18-linux-x64 --output ../binaries/server-x86_64-unknown-linux-gnu",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "clean": "rm -rf dist",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/express": "^4.17.23",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/node": "^24.0.4",
+    "pkg": "^5.8.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  },
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [],
+    "targets": [
+      "node18-win-x64",
+      "node18-macos-x64", 
+      "node18-linux-x64"
+    ],
+    "outputPath": "dist"
+  }
+}
