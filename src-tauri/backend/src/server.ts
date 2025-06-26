@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { existsSync, statSync } from 'fs';
 
 const app = express();
@@ -30,6 +31,16 @@ function createResponse<T>(success: boolean, data?: T, error?: string): ApiRespo
 
 app.get('/health', (req, res) => {
   res.json(createResponse(true, { message: 'FSai Backend is running' }));
+});
+
+app.get('/api/fs/home', (req, res) => {
+  try {
+    const homeDir = os.homedir();
+    res.json(createResponse(true, { path: homeDir }));
+  } catch (error) {
+    console.error('Error getting home directory:', error);
+    res.json(createResponse(false, null, `Failed to get home directory: ${error}`));
+  }
 });
 
 app.post('/api/fs/list', async (req, res) => {

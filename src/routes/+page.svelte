@@ -3,15 +3,15 @@
   import { Card, Button, TextField, Chip, LinearProgress } from "m3-svelte";
   import FSaiAPI, { type FileItem } from '$lib/api.js';
 
-  let backendStatus = 'Connecting...';
-  let currentPath = 'C:\\';
-  let files: FileItem[] = [];
-  let selectedFile: FileItem | null = null;
-  let fileContent = '';
-  let newFileName = '';
-  let newDirName = '';
-  let error = '';
-  let isConnected = false;
+  let backendStatus = $state('Connecting...');
+  let currentPath = $state('C:\\');
+  let files = $state<FileItem[]>([]);
+  let selectedFile = $state<FileItem | null>(null);
+  let fileContent = $state('');
+  let newFileName = $state('');
+  let newDirName = $state('');
+  let error = $state('');
+  let isConnected = $state(false);
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
   let filePreviewCache = new Map<string, { canPreview: boolean; reason?: string }>();
@@ -70,6 +70,18 @@
       if (health.success) {
         backendStatus = `Connected - ${health.data?.message}`;
         isConnected = true;
+        
+        // Get and set the user's home directory as default path
+        try {
+          const homeResult = await FSaiAPI.getHomeDirectory();
+          if (homeResult.success && homeResult.data?.path) {
+            currentPath = homeResult.data.path;
+            console.log('Set currentPath to:', currentPath);
+          }
+        } catch (e) {
+          console.warn('Could not get home directory, using default:', e);
+        }
+        
         await loadDirectory();
       } else {
         backendStatus = 'Backend connection failed';
@@ -245,9 +257,9 @@
               iconType="left"
               click={loadDirectory}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" {...$$props}>
-                <path fill="currentColor" d="M12 20q-3.35 0-5.675-2.325T4 12t2.325-5.675T12 4q1.725 0 3.3.712T18 6.75V5q0-.425.288-.712T19 4t.713.288T20 5v5q0 .425-.288.713T19 11h-5q-.425 0-.712-.288T13 10t.288-.712T14 9h3.2q-.8-1.4-2.187-2.2T12 6Q9.5 6 7.75 7.75T6 12t1.75 4.25T12 18q1.7 0 3.113-.862t2.187-2.313q.2-.35.563-.487t.737-.013q.4.125.575.525t-.025.75q-1.025 2-2.925 3.2T12 20" />
-              </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M12 20q-3.35 0-5.675-2.325T4 12t2.325-5.675T12 4q1.725 0 3.3.712T18 6.75V5q0-.425.288-.712T19 4t.713.288T20 5v5q0 .425-.288.713T19 11h-5q-.425 0-.712-.288T13 10t.288-.712T14 9h3.2q-.8-1.4-2.187-2.2T12 6Q9.5 6 7.75 7.75T6 12t1.75 4.25T12 18q1.7 0 3.113-.862t2.187-2.313q.2-.35.563-.487t.737-.013q.4.125.575.525t-.025.75q-1.025 2-2.925 3.2T12 20" />
+            </svg>
               Refresh
             </Button>
           </div>
@@ -330,7 +342,7 @@
         </div>
         <div class="file-list">
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          {#if currentPath !== 'C:\\'}
+          {#if currentPath !== 'C:\\' && currentPath !== '/'}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
