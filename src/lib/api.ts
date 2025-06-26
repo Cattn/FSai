@@ -19,11 +19,22 @@ interface AIContext {
   currentPath: string;
   folders: string[];
   files: string[];
+  chatHistory?: {
+    messages: Array<{
+      type: 'user' | 'ai' | 'system';
+      content: string;
+      timestamp: Date;
+    }>;
+    fileContents?: Array<{
+      path: string;
+      content: string;
+    }>;
+  };
 }
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory';
   parameters: {
     path?: string;
     from?: string;
@@ -143,8 +154,12 @@ class FSaiAPI {
     return this.makeRequest('/ai/process', { prompt, context });
   }
 
-  static async executeToolCall(toolCall: ToolCall): Promise<ApiResponse> {
-    return this.makeRequest('/ai/execute-tool', { toolCall });
+  static async executeToolCall(toolCall: ToolCall, context?: AIContext): Promise<ApiResponse> {
+    return this.makeRequest('/ai/execute-tool', { toolCall, context });
+  }
+
+  static async processFollowUp(originalPrompt: string, context: AIContext, toolResults: any): Promise<ApiResponse<AIResponse>> {
+    return this.makeRequest('/ai/process-followup', { originalPrompt, context, toolResults });
   }
 
   static async checkFileType(path: string): Promise<ApiResponse<{ isText: boolean; reason?: string }>> {

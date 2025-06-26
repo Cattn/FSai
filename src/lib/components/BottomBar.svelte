@@ -31,9 +31,8 @@
 
 {#if visible}
     <div 
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] max-w-[600px] w-[90%] p-3 backdrop-blur-[12px] max-sm:bottom-4 max-sm:left-4 max-sm:right-4 max-sm:w-auto max-sm:translate-x-0 max-[480px]:p-2"
+        class="w-full p-3 backdrop-blur-[12px] max-[480px]:p-2"
         style="background: rgb(var(--m3-scheme-surface-container)); border: 1px solid rgb(var(--m3-scheme-outline-variant)); border-radius: var(--m3-util-rounding-extra-large); box-shadow: var(--m3-util-elevation-3);"
-        transition:slide={{ delay: 100, duration: 400, easing: quintOut, axis: 'y' }}
     >
         <div class="flex items-center gap-3 w-full max-[480px]:gap-2">
             <div 
