@@ -17,8 +17,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/genai": "^1.7.0",
+    "@google/generative-ai": "^0.21.0",
     "@types/express": "^4.17.23",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.21.2"
   },
   "devDependencies": {
@@ -35,7 +38,7 @@
     "assets": [],
     "targets": [
       "node18-win-x64",
-      "node18-macos-x64", 
+      "node18-macos-x64",
       "node18-linux-x64"
     ],
     "outputPath": "dist"

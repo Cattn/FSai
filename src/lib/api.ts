@@ -15,6 +15,36 @@ interface FileItem {
   size?: number;
 }
 
+interface AIContext {
+  currentPath: string;
+  folders: string[];
+  files: string[];
+}
+
+interface ToolCall {
+  id: string;
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file';
+  parameters: {
+    path?: string;
+    from?: string;
+    to?: string;
+    name?: string;
+    content?: string;
+  };
+  description: string;
+  risk: 'low' | 'high';
+}
+
+interface AIRequest {
+  prompt: string;
+  context: AIContext;
+}
+
+interface AIResponse {
+  response: string;
+  toolCalls?: ToolCall[];
+}
+
 class FSaiAPI {
   private static backendPort: number | null = null;
   private static backendReady = false;
@@ -109,8 +139,12 @@ class FSaiAPI {
     return response.json();
   }
 
-  static async analyzeWithAI(data: any): Promise<ApiResponse> {
-    return this.makeRequest('/ai/analyze', data);
+  static async processWithAI(prompt: string, context: AIContext): Promise<ApiResponse<AIResponse>> {
+    return this.makeRequest('/ai/process', { prompt, context });
+  }
+
+  static async executeToolCall(toolCall: ToolCall): Promise<ApiResponse> {
+    return this.makeRequest('/ai/execute-tool', { toolCall });
   }
 
   static async checkFileType(path: string): Promise<ApiResponse<{ isText: boolean; reason?: string }>> {
@@ -127,4 +161,4 @@ class FSaiAPI {
 }
 
 export default FSaiAPI;
-export type { ApiResponse, FileItem }; 
+export type { ApiResponse, FileItem, AIContext, ToolCall, AIRequest, AIResponse }; 

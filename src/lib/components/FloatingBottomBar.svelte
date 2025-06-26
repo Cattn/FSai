@@ -5,6 +5,7 @@
     
     export let visible = false;
     export let message = "Move item to destination?";
+    export let risk: 'low' | 'high' = 'low';
     export let onAccept = () => {};
     export let onDeny = () => {};
     
@@ -24,7 +25,7 @@
     >
         <div 
             class="flex items-center justify-between p-6 gap-4 backdrop-blur-[16px] md:py-3 md:px-4 md:gap-3 max-[640px]:flex-col max-[640px]:gap-4 max-[640px]:p-4"
-            style="background: rgb(var(--m3-scheme-surface-container-high)); border: 1px solid rgb(var(--m3-scheme-outline-variant)); border-radius: var(--m3-util-rounding-extra-large); box-shadow: var(--m3-util-elevation-4);"
+            style="background: rgb(var(--m3-scheme-surface-container-high)); border: 2px solid {risk === 'high' ? 'rgb(var(--m3-scheme-error))' : 'rgb(var(--m3-scheme-outline-variant))'}; border-radius: var(--m3-util-rounding-extra-large); box-shadow: var(--m3-util-elevation-4);"
             transition:scale={{ delay: 100, duration: 300, start: 0.9 }}
         >
             <div 
@@ -48,13 +49,28 @@
                 class="flex-1 flex justify-center items-center min-w-0 max-[640px]:order-first max-[640px]:w-full"
                 transition:fade={{ delay: 300, duration: 300 }}
             >
-                <Chip 
-                    variant="general" 
-                    click={() => {}}
-                    style="max-width: 300px; text-align: center; box-shadow: var(--m3-util-elevation-2);"
-                >
-                    {message}
-                </Chip>
+                <div class="text-center">
+                    <Chip 
+                        variant="general" 
+                        click={() => {}}
+                        style="max-width: 300px; text-align: center; box-shadow: var(--m3-util-elevation-2);"
+                    >
+                        {message}
+                    </Chip>
+                    {#if risk === 'high'}
+                        <div class="risk-warning">
+                            <span style="color: rgb(var(--m3-scheme-error)); font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+                                ⚠️ HIGH RISK - Click to confirm
+                            </span>
+                        </div>
+                    {:else}
+                        <div class="risk-info">
+                            <span style="color: rgb(var(--m3-scheme-on-surface-variant)); font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+                                Press Enter to confirm
+                            </span>
+                        </div>
+                    {/if}
+                </div>
             </div>
             
             <div 

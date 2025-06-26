@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Card, Button, TextField, Chip, LinearProgress } from "m3-svelte";
   import FSaiAPI, { type FileItem } from '$lib/api.js';
+  import { curFolders, curFiles, curPath, curFile, curFileContent } from '$lib/store.js';
 
   let backendStatus = $state('Connecting...');
   let currentPath = $state('C:\\');
@@ -15,6 +16,25 @@
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
   let filePreviewCache = new Map<string, { canPreview: boolean; reason?: string }>();
+ 
+  $effect(() => {
+    curPath.set(currentPath);
+  });
+
+  $effect(() => {
+    const directories = files.filter(file => file.isDirectory).map(file => file.name);
+    const fileNames = files.filter(file => file.isFile).map(file => file.name);
+    curFolders.set(directories);
+    curFiles.set(fileNames);
+  });
+
+  $effect(() => {
+    curFile.set(selectedFile?.name || '');
+  });
+
+  $effect(() => {
+    curFileContent.set(fileContent);
+  });
 
   function getCrossPlatformHomeFallback(): string {
     // Detect platform based on user agent and path separators
@@ -428,6 +448,7 @@
           {#if !isAtRoot(currentPath)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore event_directive_deprecated -->
             <div 
               class="file-item parent-dir"
               on:click={() => navigateToPath(getParentPath(currentPath))}
@@ -441,6 +462,7 @@
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore event_directive_deprecated -->
             <div 
               class="file-item {selectedFile?.path === file.path ? 'selected' : ''}"
               on:click={() => selectFile(file)}
@@ -490,8 +512,8 @@
             <p class="file-details m3-font-body-small">Size: {formatFileSize(selectedFile.size)}</p>
           {/if}
         </div>
-        
-                {#await isFilePreviewable(selectedFile) then previewCheck}
+
+        {#await isFilePreviewable(selectedFile) then previewCheck}
           {#if previewCheck.canPreview}
             <div class="file-editor-content">
               <textarea 
@@ -501,7 +523,7 @@
                 placeholder="File content will appear here..."
               ></textarea>
               <div class="editor-actions">
-                <Button 
+                <Button
                   variant="filled" 
                   iconType="left"
                   click={saveFile}
