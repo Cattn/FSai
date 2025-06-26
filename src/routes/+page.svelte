@@ -16,6 +16,21 @@
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
   let filePreviewCache = new Map<string, { canPreview: boolean; reason?: string }>();
 
+  function getCrossPlatformHomeFallback(): string {
+    // Detect platform based on user agent and path separators
+    const isWindows = navigator.userAgent.includes('Windows') || navigator.platform.includes('Win');
+    const isMac = navigator.userAgent.includes('Mac') || navigator.platform.includes('Mac');
+    
+    if (isWindows) {
+      return 'C:\\Users\\cattn';
+    } else if (isMac) {
+      return '/Users/cattn';
+    } else {
+      // Linux/Unix
+      return '/home/cattn';
+    }
+  }
+
   async function isFilePreviewable(file: FileItem): Promise<{ canPreview: boolean; reason?: string }> {
     if (!file.isFile) {
       return { canPreview: false, reason: 'Not a file' };
@@ -65,29 +80,45 @@
 
   onMount(async () => {
     try {
+      console.log('Initializing FSai API...');
       await FSaiAPI.initialize();
+      
+      console.log('Checking backend health...');
       const health = await FSaiAPI.healthCheck();
+      console.log('Health check result:', health);
+      
       if (health.success) {
         backendStatus = `Connected - ${health.data?.message}`;
         isConnected = true;
         
         // Get and set the user's home directory as default path
+        console.log('Getting home directory...');
         try {
           const homeResult = await FSaiAPI.getHomeDirectory();
+          console.log('Home directory API result:', homeResult);
           if (homeResult.success && homeResult.data?.path) {
+            console.log('Current path before update:', currentPath);
             currentPath = homeResult.data.path;
             console.log('Set currentPath to:', currentPath);
+          } else {
+            console.error('Failed to get home directory:', homeResult.error || 'Unknown error');
+            currentPath = getCrossPlatformHomeFallback();
+            console.log('Using fallback path:', currentPath);
           }
         } catch (e) {
-          console.warn('Could not get home directory, using default:', e);
+          console.error('Error getting home directory:', e);
+          currentPath = getCrossPlatformHomeFallback();
+          console.log('Using hardcoded fallback path:', currentPath);
         }
         
+        console.log('Loading directory for path:', currentPath);
         await loadDirectory();
       } else {
         backendStatus = 'Backend connection failed';
         isConnected = false;
       }
     } catch (e) {
+      console.error('Failed to initialize:', e);
       backendStatus = `Error: ${e}`;
       isConnected = false;
     }
@@ -110,6 +141,49 @@
   async function navigateToPath(path: string) {
     currentPath = path;
     await loadDirectory();
+  }
+
+  function isAtRoot(path: string): boolean {
+    // Check if path is at root for either Windows or Unix
+    const windowsRootPattern = /^[A-Za-z]:\\?$/;
+    const unixRootPattern = /^\/$/;
+    
+    return windowsRootPattern.test(path) || unixRootPattern.test(path);
+  }
+
+  function getParentPath(path: string): string {
+    // Detect if this is a Windows or Unix-style path
+    const isWindowsPath = path.includes('\\') || /^[A-Za-z]:/.test(path);
+    const separator = isWindowsPath ? '\\' : '/';
+    
+    // Check if already at root
+    if (isAtRoot(path)) {
+      return path; // Already at root
+    }
+    
+    // Normalize path separators for consistency
+    const normalizedPath = path.replace(/[\/\\]/g, separator);
+    
+    // Split by separator and remove empty parts
+    const parts = normalizedPath.split(separator).filter(part => part !== '');
+    
+    if (parts.length <= 1) {
+      // Go to root
+      return isWindowsPath ? 'C:\\' : '/';
+    }
+    
+    // Remove the last part to go up one level
+    parts.pop();
+    
+    // Reconstruct the path
+    if (isWindowsPath) {
+      if (parts.length === 1 && parts[0].endsWith(':')) {
+        return parts[0] + '\\'; // e.g., "C:\\"
+      }
+      return parts.join('\\');
+    } else {
+      return '/' + parts.join('/');
+    }
   }
 
   async function selectFile(file: FileItem) {
@@ -153,10 +227,19 @@
     }
   }
 
+  function joinPath(basePath: string, name: string): string {
+    const isWindowsPath = basePath.includes('\\') || /^[A-Za-z]:/.test(basePath);
+    const separator = isWindowsPath ? '\\' : '/';
+    
+    // Ensure base path doesn't end with separator
+    const cleanBasePath = basePath.endsWith(separator) ? basePath.slice(0, -1) : basePath;
+    return `${cleanBasePath}${separator}${name}`;
+  }
+
   async function createFile() {
     if (!newFileName) return;
     
-    const filePath = `${currentPath}\\${newFileName}`;
+    const filePath = joinPath(currentPath, newFileName);
     try {
       const result = await FSaiAPI.writeFile(filePath, '');
       if (result.success) {
@@ -174,7 +257,7 @@
   async function createDirectory() {
     if (!newDirName) return;
     
-    const dirPath = `${currentPath}\\${newDirName}`;
+    const dirPath = joinPath(currentPath, newDirName);
     try {
       const result = await FSaiAPI.createDirectory(dirPath);
       if (result.success) {
@@ -293,7 +376,7 @@
             </div>
             
             <div class="action-group">
-                             <TextField 
+                             <TextField
                  bind:value={newDirName} 
                  label="New directory name"
                  style="margin-bottom: 0.5rem;"
@@ -342,12 +425,12 @@
         </div>
         <div class="file-list">
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          {#if currentPath !== 'C:\\' && currentPath !== '/'}
+          {#if !isAtRoot(currentPath)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
               class="file-item parent-dir"
-              on:click={() => navigateToPath(currentPath.split('\\').slice(0, -1).join('\\') || 'C:')}
+              on:click={() => navigateToPath(getParentPath(currentPath))}
             >
               <span class="file-icon">📁</span>
               <span class="m3-font-body-medium">.. (Parent Directory)</span>

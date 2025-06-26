@@ -102,7 +102,7 @@ class FSaiAPI {
     return response.json();
   }
 
-  static async getHomeDirectory(): Promise<ApiResponse<{ path: string }>> {
+  static async getHomeDirectory(): Promise<ApiResponse<{ path: string; platform?: string }>> {
     await this.ensureBackendReady();
     
     const response = await fetch(`http://127.0.0.1:${this.backendPort}/api/fs/home`);

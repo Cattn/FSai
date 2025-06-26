@@ -36,7 +36,17 @@ app.get('/health', (req, res) => {
 app.get('/api/fs/home', (req, res) => {
   try {
     const homeDir = os.homedir();
-    res.json(createResponse(true, { path: homeDir }));
+    console.log('Home directory from os.homedir():', homeDir);
+    console.log('Platform:', os.platform());
+    
+    // Use path.resolve to normalize path for current platform
+    const normalizedHomeDir = path.resolve(homeDir);
+    console.log('Normalized home directory:', normalizedHomeDir);
+    
+    res.json(createResponse(true, { 
+      path: normalizedHomeDir,
+      platform: os.platform()
+    }));
   } catch (error) {
     console.error('Error getting home directory:', error);
     res.json(createResponse(false, null, `Failed to get home directory: ${error}`));
