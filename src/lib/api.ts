@@ -12,6 +12,7 @@ interface FileItem {
   isDirectory: boolean;
   isFile: boolean;
   path: string;
+  size?: number;
 }
 
 class FSaiAPI {
@@ -103,6 +104,18 @@ class FSaiAPI {
 
   static async analyzeWithAI(data: any): Promise<ApiResponse> {
     return this.makeRequest('/ai/analyze', data);
+  }
+
+  static async checkFileType(path: string): Promise<ApiResponse<{ isText: boolean; reason?: string }>> {
+    try {
+      return await this.makeRequest('/fs/check-type', { path });
+    } catch (error) {
+      console.error('checkFileType API call failed:', error);
+      return {
+        success: false,
+        error: `API call failed: ${error}`
+      };
+    }
   }
 }
 

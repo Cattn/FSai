@@ -1,20 +1,88 @@
 <script lang="ts">
     import { Button } from "m3-svelte";
+    import { slide, scale } from 'svelte/transition';
+    import { quintOut } from 'svelte/easing';
+    
+    export let visible = false;
+    export let onSubmit: (value: string) => void = () => {};
+    let inputValue = '';
+    let inputElement: HTMLInputElement;
+    
+    // Auto-focus the input when the component becomes visible
+    $: if (visible && inputElement) {
+        setTimeout(() => {
+            inputElement.focus();
+        }, 450); // Delay to allow transition to complete
+    }
+    
+    function handleSubmit() {
+        if (inputValue.trim()) {
+            onSubmit(inputValue);
+            inputValue = '';
+        }
+    }
+    
+    function handleKeydown(event: KeyboardEvent) {
+        if (event.key === 'Enter') {
+            handleSubmit();
+        }
+    }
 </script>
 
-<div class="fixed bottom-4 py-3 left-60 right-60 rounded-full bg-primary">
-    <div class="w-1/2 mx-auto flex justify-between items-center space-x-2">
-        <input 
-            type="text" 
-            placeholder="Do something..."
-            class="bg-primary-container rounded-3xl py-3 w-11/12 text-on-surface-variant text-center focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 px-4"
-        />
-        <div class="rounded-3xl py-3 w-1/12">
-            <Button variant="elevated" iconType="full">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" {...$$props}>
-                    <path fill="currentColor" d="M4.4 19.425q-.5.2-.95-.088T3 18.5V14l8-2l-8-2V5.5q0-.55.45-.837t.95-.088l15.4 6.5q.625.275.625.925t-.625.925z" />
-                </svg>
-            </Button>
+{#if visible}
+    <div 
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] max-w-[600px] w-[90%] p-3 backdrop-blur-[12px] max-sm:bottom-4 max-sm:left-4 max-sm:right-4 max-sm:w-auto max-sm:translate-x-0 max-[480px]:p-2"
+        style="background: rgb(var(--m3-scheme-surface-container)); border: 1px solid rgb(var(--m3-scheme-outline-variant)); border-radius: var(--m3-util-rounding-extra-large); box-shadow: var(--m3-util-elevation-3);"
+        transition:slide={{ delay: 100, duration: 400, easing: quintOut, axis: 'y' }}
+    >
+        <div class="flex items-center gap-3 w-full max-[480px]:gap-2">
+            <div 
+                class="flex-1 min-w-0"
+                transition:scale={{ delay: 200, duration: 300, start: 0.8 }}
+            >
+                <input
+                    bind:this={inputElement}
+                    bind:value={inputValue}
+                    placeholder="What would you like to do?"
+                    class="w-full py-3.5 px-5 outline-none box-border transition-all duration-200 ease-in-out max-[480px]:py-3 max-[480px]:px-4 max-[480px]:text-[0.8125rem]"
+                    style="background: rgb(var(--m3-scheme-surface-container-low)); border: 1px solid transparent; border-radius: var(--m3-util-rounding-large); color: rgb(var(--m3-scheme-on-surface)); font-family: var(--m3-font); font-size: 0.875rem; font-weight: 400; line-height: 1.5;"
+                    on:keydown={handleKeydown}
+                />
+            </div>
+            
+            <div 
+                class="flex-shrink-0"
+                transition:scale={{ delay: 300, duration: 300, start: 0.8 }}
+            >
+                <Button
+                    variant="filled"
+                    iconType="full"
+                    click={handleSubmit}
+                    disabled={!inputValue.trim()}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M4.4 19.425q-.5.2-.95-.088T3 18.5V14l8-2l-8-2V5.5q0-.55.45-.837t.95-.088l15.4 6.5q.625.275.625.925t-.625.925z" />
+                    </svg>
+                </Button>
+            </div>
         </div>
     </div>
-</div>
+{/if}
+
+<style>
+    input::placeholder {
+        color: rgb(var(--m3-scheme-on-surface-variant));
+        opacity: 0.8;
+    }
+
+    input:focus {
+        background: rgb(var(--m3-scheme-surface)) !important;
+        border-color: rgb(var(--m3-scheme-primary)) !important;
+        box-shadow: 0 0 0 2px rgb(var(--m3-scheme-primary) / 0.12) !important;
+    }
+
+    input:hover:not(:focus) {
+        background: rgb(var(--m3-scheme-surface-container)) !important;
+        border-color: rgb(var(--m3-scheme-outline)) !important;
+    }
+</style>
