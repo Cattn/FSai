@@ -2,6 +2,8 @@
     <strong>FSai</strong>
 </h3>
 
+FSi allows you to explore, organize, and learn more about your files with a simple, file-manager based layout, and a clean chat UI. Smooth & responsive animations, quick responses, and relavent tool calls to complete tasks. 
+
 ### Showcases
 
 <p align="center">
@@ -14,6 +16,18 @@
 </p>
 
 https://github.com/user-attachments/assets/d787f041-0c46-47c3-9009-e26657c06fb6
+
+## Features
+> Note: this isn't a comprehensive list of all "uses" of this app, simply the tools the agent has at the moment.
+
+- Read files (Videos, Images, PDFs, Text Files)
+- Write to files (Text)
+- Create a directory
+- Read the contents of a directory
+- Get the tree of a directory
+- Move files/folders to specified locations
+
+The agent can also make use of a variety of these tools in combination to fufill more complex requests.
 
 ## Installation
 
