@@ -8,6 +8,7 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import { execSync } from 'child_process';
 import { lookup } from 'mime-types';
+import rateLimit from 'express-rate-limit';
 
 // Load environment variables
 dotenv.config();
@@ -105,6 +106,23 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Rate limiting because my client code sucks occasionally
+const aiLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000, 
+	max: 100, 
+	standardHeaders: true,
+	legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, 
+  max: 15, 
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests, please try again after a minute.'
+});
 
 // Types
 interface ApiResponse<T = any> {
@@ -350,7 +368,7 @@ async function processWithAI(prompt: string, context: AIContext): Promise<AIResp
     }
 
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: { temperature: 0 }
     });
 
@@ -480,7 +498,7 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
     }
 
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: { temperature: 0 }
     });
 
@@ -886,7 +904,7 @@ app.post('/api/fs/mkdir', async (req, res) => {
 });
 
 // AI processing endpoint
-app.post('/api/ai/process', async (req, res) => {
+app.post('/api/ai/process', strictLimiter, async (req, res) => {
   try {
     const { prompt, context }: AIRequest = req.body;
     
@@ -906,7 +924,7 @@ app.post('/api/ai/process', async (req, res) => {
 });
 
 // Execute tool call endpoint (for confirmed tool calls)
-app.post('/api/ai/execute-tool', async (req, res) => {
+app.post('/api/ai/execute-tool', aiLimiter, async (req, res) => {
   try {
     const { toolCall, context }: { toolCall: ToolCall; context?: AIContext } = req.body;
     
@@ -1208,7 +1226,7 @@ app.post('/api/ai/execute-tool', async (req, res) => {
 });
 
 // Follow-up AI processing after tool execution
-app.post('/api/ai/process-followup', async (req, res) => {
+app.post('/api/ai/process-followup', strictLimiter, async (req, res) => {
   try {
     const { originalPrompt, context, toolResults } = req.body;
     
@@ -1239,6 +1257,7 @@ async function startServer() {
         const address = server.address();
         if (address && typeof address === 'object') {
             const actualPort = address.port;
+            console.log(`BACKEND_PORT:${actualPort}`);
         }
     });
 

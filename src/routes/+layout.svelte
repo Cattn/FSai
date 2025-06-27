@@ -17,18 +17,21 @@
         readFileContents,
         aiProcessing,
         executedToolResults,
+        initialToolCallCount,
         type ChatMessage,
         type ReadFileContent,
         settings
     } from '$lib/store.js';
     import { quintOut } from 'svelte/easing';
     import { fade } from 'svelte/transition';
+    import type { LayoutProps } from './$types.js';
 
-    let initialToolCallCount = 0;
-    let floatingBarHeight = 0;
+    let { children }: LayoutProps = $props();
+
+    let floatingBarHeight = $state(0);
 
     onMount(() => {
-        FSaiAPI.getSettings().then(result => {
+        FSaiAPI.getSettings().then((result) => {
             if (result.success && result.data) {
                 settings.set(result.data);
             }
@@ -45,7 +48,6 @@
                 confirmationDetails.set(null);
                 pendingToolCalls.set([]);
                 executedToolResults.set([]);
-                initialToolCallCount = 0;
             }
 
             if (
@@ -66,27 +68,36 @@
         };
     });
 
-    $: if ($pendingToolCalls.length > 0) {
-        if (initialToolCallCount === 0) {
-            initialToolCallCount = $pendingToolCalls.length;
+    $effect(() => {
+        const calls = $pendingToolCalls;
+        if (calls.length > 0) {
+            confirmationDetails.set({
+                toolCalls: calls,
+                onAccept: (toolCall) => handleToolAction(toolCall, 'accept'),
+                onDeny: (toolCall) => handleToolAction(toolCall, 'deny')
+            });
+        } else {
+            confirmationDetails.set(null);
         }
+    });
 
-        confirmationDetails.set({
-            toolCalls: $pendingToolCalls,
-            onAccept: (toolCall) => handleToolAction(toolCall, 'accept'),
-            onDeny: (toolCall) => handleToolAction(toolCall, 'deny')
-        });
-    } else {
-        confirmationDetails.set(null);
-    }
+    $effect(() => {
+        const results = $executedToolResults;
+        const prompt = $originalPrompt;
+        const pendingCount = $pendingToolCalls.length;
+        const initialCount = $initialToolCallCount;
+        const isProcessing = $aiProcessing;
 
-    $: if (
-        $executedToolResults.length > 0 &&
-        $executedToolResults.length === initialToolCallCount &&
-        $originalPrompt
-    ) {
-        processFollowUp($executedToolResults);
-    }
+        if (
+            results.length > 0 &&
+            pendingCount === 0 &&
+            prompt &&
+            results.length === initialCount &&
+            !isProcessing
+        ) {
+            processFollowUp(results);
+        }
+    });
 
     function generateMessageId(): string {
         return 'msg_' + Math.random().toString(36).substring(2, 11);
@@ -153,13 +164,14 @@
                 addChatMessage('ai', result.data.response);
 
                 if (result.data.toolCalls && result.data.toolCalls.length > 0) {
-                    pendingToolCalls.set(result.data.toolCalls);
+                    const toolCalls = result.data.toolCalls;
+                    pendingToolCalls.set(toolCalls);
+                    initialToolCallCount.set(toolCalls.length);
                     originalPrompt.set(inputValue);
                     executedToolResults.set([]);
-                    initialToolCallCount = 0; // Reset count
                     addChatMessage(
                         'system',
-                        `Requesting permission for ${result.data.toolCalls.length} action(s).`
+                        `Requesting permission for ${toolCalls.length} action(s).`
                     );
                 }
             } else {
@@ -249,12 +261,13 @@
                 }
 
                 if (followUpResult.data.toolCalls && followUpResult.data.toolCalls.length > 0) {
-                    pendingToolCalls.set(followUpResult.data.toolCalls);
+                    const toolCalls = followUpResult.data.toolCalls;
+                    pendingToolCalls.set(toolCalls);
+                    initialToolCallCount.set(toolCalls.length);
                     executedToolResults.set([]);
-                    initialToolCallCount = 0;
                     addChatMessage(
                         'system',
-                        `Requesting permission for ${followUpResult.data.toolCalls.length} more action(s).`
+                        `Requesting permission for ${toolCalls.length} more action(s).`
                     );
                     aiProcessing.set(false);
                 } else {
@@ -279,9 +292,8 @@
         pendingToolCalls.set([]);
         originalPrompt.set('');
         executedToolResults.set([]);
-        initialToolCallCount = 0;
+        initialToolCallCount.set(0);
     }
-
 
     function handleChatClose() {
         chatVisible.set(false);
@@ -294,7 +306,7 @@
     }
 </script>
 
-<slot />
+{@render children()}
 
 <Chat
     visible={$chatVisible}
@@ -313,7 +325,7 @@
         toolCalls={$confirmationDetails.toolCalls}
         onAccept={(toolCall) => $confirmationDetails?.onAccept(toolCall)}
         onDeny={(toolCall) => $confirmationDetails?.onDeny(toolCall)}
-        on:heightChange={(e) => (floatingBarHeight = e.detail)}
+        onHeightChange={(height) => (floatingBarHeight = height)}
     />
 {/if}
 

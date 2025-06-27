@@ -2,19 +2,28 @@
 	import { fly, scale, fade } from 'svelte/transition';
 	import { backOut } from 'svelte/easing';
 	import type { ToolCall } from '$lib/api';
-	import { createEventDispatcher } from 'svelte';
 
-	export let visible = false;
-	export let toolCalls: ToolCall[] = [];
-	export let onAccept: (toolCall: ToolCall) => void = () => {};
-	export let onDeny: (toolCall: ToolCall) => void = () => {};
+	let {
+		visible = false,
+		toolCalls = [] as ToolCall[],
+		onAccept = (toolCall: ToolCall) => {},
+		onDeny = (toolCall: ToolCall) => {},
+		onHeightChange = (height: number) => {}
+	} = $props<{
+		visible?: boolean;
+		toolCalls?: ToolCall[];
+		onAccept?: (toolCall: ToolCall) => void;
+		onDeny?: (toolCall: ToolCall) => void;
+		onHeightChange?: (height: number) => void;
+	}>();
 
-	let height = 0;
-	const dispatch = createEventDispatcher<{ heightChange: number }>();
+	let height = $state(0);
 
-	$: if (height > 0) {
-		dispatch('heightChange', height);
-	}
+	$effect(() => {
+		if (height > 0) {
+			onHeightChange(height);
+		}
+	});
 
 	function handleAccept(toolCall: ToolCall) {
 		onAccept(toolCall);
@@ -69,7 +78,7 @@
 						<div class="flex items-center gap-2 flex-shrink-0">
 							<!-- svelte-ignore a11y_consider_explicit_label -->
 							<button
-								on:click={() => handleDeny(toolCall)}
+								onclick={() => handleDeny(toolCall)}
 								class="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
 								style="background-color: rgb(var(--m3-scheme-surface-container-high)); color: rgb(var(--m3-scheme-error));"
 								title="Deny"
@@ -83,7 +92,7 @@
 							</button>
 							<!-- svelte-ignore a11y_consider_explicit_label -->
 							<button
-								on:click={() => handleAccept(toolCall)}
+								onclick={() => handleAccept(toolCall)}
 								class="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
 								style="background-color: rgb(var(--m3-scheme-primary)); color: rgb(var(--m3-scheme-on-primary));"
 								title="Accept"

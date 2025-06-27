@@ -3,16 +3,26 @@
     import { slide, scale } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
     
-    export let visible = false;
-    export let onSubmit: (value: string) => void = () => {};
-    let inputValue = '';
-    let inputElement: HTMLInputElement;
+    let {
+        visible = $bindable(false),
+        onSubmit = (value: string) => {}
+    } = $props<{
+        visible?: boolean;
+        onSubmit?: (value: string) => void;
+    }>();
     
-    $: if (visible && inputElement) {
-        setTimeout(() => {
-            inputElement.focus();
-        }, 450);
-    }
+    let inputValue = $state('');
+    let inputElement: HTMLInputElement | null = $state(null);
+    
+    $effect(() => {
+        if (visible && inputElement) {
+            setTimeout(() => {
+                if (inputElement) {
+                    inputElement.focus();
+                }
+            }, 450);
+        }
+    });
     
     function handleSubmit() {
         if (inputValue.trim()) {
@@ -44,7 +54,7 @@
                     placeholder="What would you like to do?"
                     class="w-full py-3.5 px-5 outline-none box-border transition-all duration-200 ease-in-out max-[480px]:py-3 max-[480px]:px-4 max-[480px]:text-[0.8125rem]"
                     style="background: rgb(var(--m3-scheme-surface-container-low)); border: 1px solid transparent; border-radius: var(--m3-util-rounding-large); color: rgb(var(--m3-scheme-on-surface)); font-family: var(--m3-font); font-size: 0.875rem; font-weight: 400; line-height: 1.5;"
-                    on:keydown={handleKeydown}
+                    onkeydown={handleKeydown}
                 />
             </div>
             

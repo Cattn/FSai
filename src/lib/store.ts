@@ -49,6 +49,8 @@ export interface ToolResult {
 }
 export const executedToolResults = writable<ToolResult[]>([]);
 
+export const initialToolCallCount = writable<number>(0);
+
 export const settings = writable({
     apiKey: '',
     allowRootAccess: false,

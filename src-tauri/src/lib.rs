@@ -1,10 +1,19 @@
 use tauri::{Manager, State, Emitter};
-use tauri_plugin_shell::{ShellExt, process::CommandEvent};
+use tauri_plugin_shell::{ShellExt, process::CommandEvent, process::CommandChild};
 use std::sync::Mutex;
 
-#[derive(Default)]
 struct AppState {
     backend_port: Mutex<Option<u16>>,
+    child_process: Mutex<Option<CommandChild>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            backend_port: Mutex::new(None),
+            child_process: Mutex::new(None),
+        }
+    }
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -26,9 +35,13 @@ async fn start_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
         .sidecar("server")
         .expect("failed to create `server` binary command");
     
-    let (mut rx, _child) = sidecar_command
+    let (mut rx, child) = sidecar_command
         .spawn()
         .expect("Failed to spawn sidecar");
+    
+    // Store the child process in the state
+    let app_state = app_handle.state::<AppState>();
+    *app_state.child_process.lock().unwrap() = Some(child);
     
     // Listen for port output
     let app_handle_clone = app_handle.clone();
@@ -48,7 +61,12 @@ async fn start_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
                         app_handle_clone.emit("backend-ready", port).unwrap();
                         println!("Backend started on port: {}", port);
                     }
+                } else {
+                    println!("[sidecar stdout]: {}", line_str);
                 }
+            } else if let CommandEvent::Stderr(line) = event {
+                let line_str = String::from_utf8_lossy(&line);
+                eprintln!("[sidecar stderr]: {}", line_str);
             }
         }
     });
