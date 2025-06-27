@@ -23,7 +23,7 @@ const resolvedHomeDir = path.resolve(os.homedir());
 
 function isPathAllowed(p: string | undefined, allowRoot: boolean, currentPath?: string): boolean {
     if (allowRoot) return true;
-    if (!p) return true; // A missing path is not a security violation, let handlers reject it.
+    if (!p) return true; 
 
     let resolvedPath: string;
     if (currentPath && !path.isAbsolute(p)) {
@@ -56,7 +56,6 @@ async function loadSettings() {
             const fileContent = await fs.readFile(configFile, 'utf-8');
             const loadedSettings = JSON.parse(fileContent);
             settings = { ...settings, ...loadedSettings };
-            console.log('⚙️ Settings loaded from', configFile);
         }
     } catch (error) {
         console.warn('Could not load settings file:', error);
@@ -69,35 +68,30 @@ async function saveSettings() {
     try {
         await fs.mkdir(configDir, { recursive: true });
         await fs.writeFile(configFile, JSON.stringify(settings, null, 2), 'utf-8');
-        console.log('⚙️ Settings saved to', configFile);
     } catch (error) {
         console.error('Could not save settings file:', error);
     }
 }
 
-// Function to read environment variable from system
+// mainly for dev-purposes -- fetches env
 function readSystemEnvVariable(variableName: string): string {
   try {
-    // Try process.env first
     if (process.env[variableName]) {
       return process.env[variableName];
     }
     
-    // If not found, try to read from system environment
     const command = os.platform() === 'win32' 
       ? `echo $env:${variableName}` 
       : `printenv ${variableName}`;
     
     const result = execSync(command, { encoding: 'utf8' }).trim();
     
-    // On Windows, if the variable doesn't exist, it returns %VARIABLE_NAME%
     if (os.platform() === 'win32' && result === `%${variableName}%`) {
       throw new Error(`Environment variable ${variableName} not found`);
     }
     
     return result;
   } catch (error) {
-    console.warn(`Failed to read environment variable ${variableName}:`, error);
     return '';
   }
 }
@@ -183,9 +177,6 @@ function initializeGenAI() {
     GEMINI_API_KEY = settings.apiKey || systemGeminiKey;
     if (GEMINI_API_KEY) {
         genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        console.log('✨ Gemini AI initialized successfully.');
-    } else {
-        console.warn('⚠️ Gemini API key not found. AI functionality will be limited.');
     }
 }
 
@@ -336,7 +327,6 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
 function truncateChatHistory(messages: Array<{type: string, content: string, timestamp: Date}>, maxTokens: number = 2000): Array<{type: string, content: string, timestamp: Date}> {
   if (!messages || messages.length === 0) return [];
   
-  // Start from the most recent messages and work backwards
   const recent = messages.slice().reverse();
   const truncated = [];
   let totalLength = 0;
@@ -355,9 +345,6 @@ function truncateChatHistory(messages: Array<{type: string, content: string, tim
 
 async function processWithAI(prompt: string, context: AIContext): Promise<AIResponse> {
   try {
-    console.log('🤖 Processing AI request with prompt:', prompt.substring(0, 50) + '...');
-    console.log('🔑 API key available for request:', !!GEMINI_API_KEY);
-    
     if (!genAI) {
         return { response: 'AI is not configured. Please set the API key in settings.' };
     }
@@ -367,7 +354,6 @@ async function processWithAI(prompt: string, context: AIContext): Promise<AIResp
       generationConfig: { temperature: 0 }
     });
 
-    // Build chat history context
     let chatHistoryText = '';
     if (context.chatHistory?.messages && context.chatHistory.messages.length > 0) {
       const truncatedHistory = truncateChatHistory(context.chatHistory.messages, 1500);
@@ -376,7 +362,6 @@ async function processWithAI(prompt: string, context: AIContext): Promise<AIResp
       ).join('\n')}\n`;
     }
 
-    // Build file contents context
     let fileContentsText = '';
     if (context.chatHistory?.fileContents && context.chatHistory.fileContents.length > 0) {
       fileContentsText = `\nPreviously read files:\n${context.chatHistory.fileContents.map(file => 
@@ -411,7 +396,6 @@ Keep responses brief and focused unless detailed explanation is requested.`;
     const response = result.response;
     const toolCalls: ToolCall[] = [];
 
-    // Check for function calls
     const candidateFunctionCalls = response.functionCalls();
     if (candidateFunctionCalls && candidateFunctionCalls.length > 0) {
       for (const functionCall of candidateFunctionCalls) {
@@ -465,7 +449,6 @@ Keep responses brief and focused unless detailed explanation is requested.`;
 
 async function generateTree(dirPath: string, prefix = ''): Promise<string> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    // Sort entries to be deterministic and user-friendly
     entries.sort((a, b) => {
         if (a.isDirectory() && !b.isDirectory()) return -1;
         if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -492,9 +475,6 @@ async function generateTree(dirPath: string, prefix = ''): Promise<string> {
 
 async function processFollowUpWithAI(originalPrompt: string, context: AIContext, toolResults: any): Promise<AIResponse> {
   try {
-    console.log('🤖 Processing follow-up AI request with original prompt:', originalPrompt.substring(0, 50) + '...');
-    console.log('🔧 Tool results:', JSON.stringify(toolResults).substring(0, 100) + '...');
-    
     if (!genAI) {
         return { response: 'AI is not configured. Please set the API key in settings.' };
     }
@@ -552,7 +532,6 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
         toolResultsText = `I have executed a tool call and retrieved the following information:\n${toolResultsText}`;
     }
 
-    // Build chat history context
     let chatHistoryText = '';
     if (context.chatHistory?.messages && context.chatHistory.messages.length > 0) {
       const truncatedHistory = truncateChatHistory(context.chatHistory.messages, 1000);
@@ -561,7 +540,6 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
       ).join('\n')}\n`;
     }
 
-    // Build file contents context
     let fileContentsText = '';
     if (context.chatHistory?.fileContents && context.chatHistory.fileContents.length > 0) {
       fileContentsText = `\nPreviously read files:\n${context.chatHistory.fileContents.map(file => 
@@ -600,7 +578,6 @@ Now, analyze the results. If the original request is fully addressed, provide a 
     const response = result.response;
     const toolCalls: ToolCall[] = [];
 
-    // Check for function calls
     const candidateFunctionCalls = response.functionCalls();
     if (candidateFunctionCalls && candidateFunctionCalls.length > 0) {
       for (const functionCall of candidateFunctionCalls) {
@@ -666,14 +643,12 @@ app.post('/api/settings', async (req, res) => {
         settings = { ...settings, ...newSettings };
         await saveSettings();
         
-        // Re-initialize AI with new key if it changed
         if (newSettings.apiKey !== undefined) {
             initializeGenAI();
         }
         
         res.json(createResponse(true, settings));
     } catch (error) {
-        console.error('Error saving settings:', error);
         res.json(createResponse(false, null, `Failed to save settings: ${error}`));
     }
 });
@@ -681,19 +656,14 @@ app.post('/api/settings', async (req, res) => {
 app.get('/api/fs/home', (req, res) => {
   try {
     const homeDir = os.homedir();
-    console.log('Home directory from os.homedir():', homeDir);
-    console.log('Platform:', os.platform());
     
-    // Use path.resolve to normalize path for current platform
     const normalizedHomeDir = path.resolve(homeDir);
-    console.log('Normalized home directory:', normalizedHomeDir);
     
     res.json(createResponse(true, { 
       path: normalizedHomeDir,
       platform: os.platform()
     }));
   } catch (error) {
-    console.error('Error getting home directory:', error);
     res.json(createResponse(false, null, `Failed to get home directory: ${error}`));
   }
 });
@@ -710,7 +680,6 @@ app.post('/api/fs/list', async (req, res) => {
         return res.json(createResponse(false, null, `Access to path '${dirPath}' is disallowed by settings.`));
     }
 
-    // Normalize path for Windows
     const normalizedPath = path.resolve(dirPath);
     
     if (!existsSync(normalizedPath)) {
@@ -737,12 +706,10 @@ app.post('/api/fs/list', async (req, res) => {
           path: fullPath
         });
       } catch (e) {
-        // Skip entries we can't read
         console.warn(`Could not read entry ${entry}:`, e);
       }
     }
 
-    // Sort: directories first, then files, both alphabetically
     files.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
@@ -751,7 +718,6 @@ app.post('/api/fs/list', async (req, res) => {
 
     res.json(createResponse(true, files));
   } catch (error) {
-    console.error('Error listing directory:', error);
     res.json(createResponse(false, null, `Failed to list directory: ${error}`));
   }
 });
@@ -783,7 +749,6 @@ app.post('/api/fs/read', async (req, res) => {
     const content = await fs.readFile(normalizedPath, 'utf8');
     res.json(createResponse(true, { content, path: normalizedPath }));
   } catch (error) {
-    console.error('Error reading file:', error);
     res.json(createResponse(false, null, `Failed to read file: ${error}`));
   }
 });
@@ -807,14 +772,12 @@ app.post('/api/fs/write', async (req, res) => {
 
     const normalizedPath = path.resolve(filePath);
     
-    // Ensure directory exists
     const dir = path.dirname(normalizedPath);
     await fs.mkdir(dir, { recursive: true });
 
     await fs.writeFile(normalizedPath, content, 'utf8');
     res.json(createResponse(true, { message: 'File written successfully', path: normalizedPath }));
   } catch (error) {
-    console.error('Error writing file:', error);
     res.json(createResponse(false, null, `Failed to write file: ${error}`));
   }
 });
@@ -848,7 +811,6 @@ app.post('/api/fs/delete', async (req, res) => {
       res.json(createResponse(true, { message: 'File deleted successfully', path: normalizedPath }));
     }
   } catch (error) {
-    console.error('Error deleting:', error);
     res.json(createResponse(false, null, `Failed to delete: ${error}`));
   }
 });
@@ -877,7 +839,6 @@ app.post('/api/fs/check-type', async (req, res) => {
       return res.json(createResponse(false, { isText: false, reason: 'Path is not a file' }, 'Path is not a file'));
     }
 
-    // Heuristic to check for binary files. Read a chunk and look for null bytes.
     const buffer = Buffer.alloc(512);
     const fd = await fs.open(normalizedPath, 'r');
     const { bytesRead } = await fd.read(buffer, 0, 512, 0);
@@ -894,7 +855,6 @@ app.post('/api/fs/check-type', async (req, res) => {
 
     res.json(createResponse(true, { isText }));
   } catch (error) {
-    console.error('Error checking file type:', error);
     res.json(createResponse(false, null, `Failed to check file type: ${error}`));
   }
 });
@@ -921,7 +881,6 @@ app.post('/api/fs/mkdir', async (req, res) => {
     await fs.mkdir(normalizedPath, { recursive: true });
     res.json(createResponse(true, { message: 'Directory created successfully', path: normalizedPath }));
   } catch (error) {
-    console.error('Error creating directory:', error);
     res.json(createResponse(false, null, `Failed to create directory: ${error}`));
   }
 });
@@ -942,7 +901,6 @@ app.post('/api/ai/process', async (req, res) => {
     const aiResponse = await processWithAI(prompt, context);
     res.json(createResponse(true, aiResponse));
   } catch (error) {
-    console.error('Error in AI processing:', error);
     res.json(createResponse(false, null, `AI processing failed: ${error}`));
   }
 });
@@ -958,7 +916,6 @@ app.post('/api/ai/execute-tool', async (req, res) => {
 
     const allowRootAccess = context?.settings?.allowRootAccess ?? settings.allowRootAccess;
 
-    // Execute the tool call based on type
     switch (toolCall.type) {
       case 'read_file':
         if (!toolCall.parameters.path) {
@@ -968,19 +925,12 @@ app.post('/api/ai/execute-tool', async (req, res) => {
           return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
         }
         
-        console.log('🔍 Tool call path received:', toolCall.parameters.path);
-        console.log('🔍 Context currentPath:', context?.currentPath);
-        
-        // Resolve path relative to context directory if available, otherwise use current working directory
         let normalizedPath: string;
         if (context?.currentPath && !path.isAbsolute(toolCall.parameters.path)) {
           normalizedPath = path.resolve(context.currentPath, toolCall.parameters.path);
         } else {
           normalizedPath = path.resolve(toolCall.parameters.path);
         }
-        
-        console.log('🔍 Normalized path:', normalizedPath);
-        console.log('🔍 Path exists:', existsSync(normalizedPath));
         
         if (!existsSync(normalizedPath)) {
           return res.json(createResponse(false, null, `File does not exist: ${normalizedPath}`));
@@ -1119,7 +1069,6 @@ app.post('/api/ai/execute-tool', async (req, res) => {
         }
 
         let finalDestinationPath = normalizedDestinationPath;
-        // If destination is an existing directory, move the item inside it
         if (existsSync(normalizedDestinationPath) && statSync(normalizedDestinationPath).isDirectory()) {
             finalDestinationPath = path.join(normalizedDestinationPath, path.basename(normalizedSourcePath));
         }
@@ -1180,7 +1129,6 @@ app.post('/api/ai/execute-tool', async (req, res) => {
           resolvedPath = path.resolve(filePath);
         }
 
-        // Ensure directory exists
         const dir = path.dirname(resolvedPath);
         await fs.mkdir(dir, { recursive: true });
 
@@ -1255,7 +1203,6 @@ app.post('/api/ai/execute-tool', async (req, res) => {
         res.json(createResponse(false, null, `Tool type '${toolCall.type}' not yet implemented`));
     }
   } catch (error) {
-    console.error('Error executing tool call:', error);
     res.json(createResponse(false, null, `Tool execution failed: ${error}`));
   }
 });
@@ -1280,7 +1227,6 @@ app.post('/api/ai/process-followup', async (req, res) => {
     const aiResponse = await processFollowUpWithAI(originalPrompt, context, toolResults);
     res.json(createResponse(true, aiResponse));
   } catch (error) {
-    console.error('Error in follow-up AI processing:', error);
     res.json(createResponse(false, null, `Follow-up AI processing failed: ${error}`));
   }
 });
@@ -1293,30 +1239,22 @@ async function startServer() {
         const address = server.address();
         if (address && typeof address === 'object') {
             const actualPort = address.port;
-            console.log(`BACKEND_PORT:${actualPort}`);
-            console.log(`FSai backend server running on http://127.0.0.1:${actualPort}`);
         }
     });
 
-    // Graceful shutdown
     process.on('SIGTERM', () => {
-        console.log('Received SIGTERM, shutting down gracefully');
         server.close(() => {
-            console.log('Server closed');
             process.exit(0);
         });
     });
 
     process.on('SIGINT', () => {
-        console.log('Received SIGINT, shutting down gracefully');
         server.close(() => {
-            console.log('Server closed');
             process.exit(0);
         });
     });
 }
 
-// Start server
-const PORT = parseInt(process.env.PORT || '0'); // Parse to number
+const PORT = parseInt(process.env.PORT || '0'); 
 
 startServer();
