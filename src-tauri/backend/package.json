@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "build-exe": "npm run build && npm run pkg-build",
-    "pkg-build": "pkg dist/server.js --targets node18-win-x64 --output ../binaries/server-x86_64-pc-windows-msvc.exe && pkg dist/server.js --targets node18-macos-x64 --output ../binaries/server-x86_64-apple-darwin && pkg dist/server.js --targets node18-linux-x64 --output ../binaries/server-x86_64-unknown-linux-gnu && pkg dist/server.js --targets node18-macos-arm64 --output ../binaries/server-aarch64-apple-darwin",
+    "pkg-build": "npm run pkg-build:x64 && node -e \"if (process.arch === 'arm64') { require('child_process').execSync('npm run pkg-build:arm64', { stdio: 'inherit' }) }\"",
+    "pkg-build:x64": "pkg dist/server.js --targets node18-win-x64 --output ../binaries/server-x86_64-pc-windows-msvc.exe && pkg dist/server.js --targets node18-macos-x64 --output ../binaries/server-x86_64-apple-darwin && pkg dist/server.js --targets node18-linux-x64 --output ../binaries/server-x86_64-unknown-linux-gnu",
+    "pkg-build:arm64": "pkg dist/server.js --targets node18-macos-arm64 --output ../binaries/server-aarch64-apple-darwin",
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "clean": "rm -rf dist",
