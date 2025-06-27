@@ -3,6 +3,7 @@
 	import { scale, slide } from "svelte/transition";
 	import BottomBar from "./BottomBar.svelte";
 	import FloatingChat from "./FloatingChat.svelte";
+	import type { ToolCall } from "$lib/api";
 
     export let visible = false;
     export let messages: Array<{id: string, type: 'user' | 'ai' | 'system', content: string, timestamp: Date}> = [];
@@ -11,6 +12,7 @@
     export let onClose = () => {};
     export let confirmationVisible = false;
     export let floatingBarHeight = 0;
+	export let pendingToolCalls: ToolCall[] = [];
 
 </script>
 
@@ -25,7 +27,7 @@
         transition:scale={{ delay: 200, duration: 300, start: 0.95 }}
     >
         {#if messages.length > 0}
-            <FloatingChat {messages} {onNewChat} {onClose} bind:visible={visible} />
+            <FloatingChat {messages} {onNewChat} {onClose} bind:visible={visible} {pendingToolCalls} />
         {/if}
         {#if !confirmationVisible}
             <BottomBar {onSubmit} bind:visible={visible} />

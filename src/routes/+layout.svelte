@@ -346,6 +346,7 @@
     onClose={handleChatClose}
     confirmationVisible={$confirmationDetails !== null}
     floatingBarHeight={$confirmationDetails ? floatingBarHeight : 0}
+    pendingToolCalls={$pendingToolCalls}
 />
 
 {#if $confirmationDetails}

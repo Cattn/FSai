@@ -146,7 +146,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file';
   parameters: {
     path?: string;
     from?: string;
@@ -200,6 +200,25 @@ const readFileFunction = {
       }
     },
     required: ['path']
+  }
+};
+
+const writeFileFunction = {
+  name: 'write_file',
+  description: 'Writes or creates a text file with the specified content at the given path. If the file exists, it will be overwritten. If it does not exist, it will be created. Use for text-based files like .txt, .md, .json, etc.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path to the file to write.'
+      },
+      content: {
+        type: SchemaType.STRING,
+        description: 'The content to write to the file.'
+      }
+    },
+    required: ['path', 'content']
   }
 };
 
@@ -281,6 +300,7 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
     case 'read_directory':
     case 'get_tree':
       return 'low';
+    case 'write_file':
     case 'delete_file':
     case 'move_file':
     case 'move_item':
@@ -360,7 +380,7 @@ Keep responses brief and focused unless detailed explanation is requested.`;
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
       tools: [{
-        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction]
+        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction]
       }]
     });
 
@@ -375,6 +395,9 @@ Keep responses brief and focused unless detailed explanation is requested.`;
         switch(functionCall.name) {
           case 'read_file':
             description = `Read file: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'write_file':
+            description = `Write to file: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           case 'read_directory':
             description = `List contents of: ${(functionCall.args as any)?.path || 'unknown path'}`;
@@ -527,7 +550,7 @@ Now, analyze the results. If the original request is fully addressed, provide a 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: followUpPrompt }] }],
       tools: [{
-        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction]
+        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction]
       }]
     });
 
@@ -542,6 +565,9 @@ Now, analyze the results. If the original request is fully addressed, provide a 
         switch(functionCall.name) {
           case 'read_file':
             description = `Read file: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'write_file':
+            description = `Write to file: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           case 'read_directory':
             description = `List contents of: ${(functionCall.args as any)?.path || 'unknown path'}`;
@@ -778,6 +804,52 @@ app.post('/api/fs/delete', async (req, res) => {
   } catch (error) {
     console.error('Error deleting:', error);
     res.json(createResponse(false, null, `Failed to delete: ${error}`));
+  }
+});
+
+// Check if a file is text or binary
+app.post('/api/fs/check-type', async (req, res) => {
+  try {
+    const { path: filePath } = req.body;
+
+    if (!filePath || typeof filePath !== 'string') {
+      return res.json(createResponse(false, null, 'Path is required'));
+    }
+
+    if (!isPathAllowed(filePath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed by settings.`));
+    }
+
+    const normalizedPath = path.resolve(filePath);
+
+    if (!existsSync(normalizedPath)) {
+      return res.json(createResponse(false, { isText: false, reason: 'File does not exist' }, 'File does not exist'));
+    }
+
+    const stat = statSync(normalizedPath);
+    if (!stat.isFile()) {
+      return res.json(createResponse(false, { isText: false, reason: 'Path is not a file' }, 'Path is not a file'));
+    }
+
+    // Heuristic to check for binary files. Read a chunk and look for null bytes.
+    const buffer = Buffer.alloc(512);
+    const fd = await fs.open(normalizedPath, 'r');
+    const { bytesRead } = await fd.read(buffer, 0, 512, 0);
+    await fd.close();
+
+    const chunk = buffer.slice(0, bytesRead);
+    let isText = true;
+    for (let i = 0; i < chunk.length; i++) {
+        if (chunk[i] === 0) {
+            isText = false;
+            break;
+        }
+    }
+
+    res.json(createResponse(true, { isText }));
+  } catch (error) {
+    console.error('Error checking file type:', error);
+    res.json(createResponse(false, null, `Failed to check file type: ${error}`));
   }
 });
 
@@ -1042,6 +1114,36 @@ app.post('/api/ai/execute-tool', async (req, res) => {
           toolCallId: toolCall.id,
           result: { message: `Directory '${folderName}' created at '${dirPath}'` },
           message: 'Directory created successfully'
+        }));
+        break;
+      }
+
+      case 'write_file': {
+        const { path: filePath, content: fileContent } = toolCall.parameters;
+        if (!filePath || fileContent === undefined) {
+          return res.json(createResponse(false, null, 'Path and content parameters are required for write_file'));
+        }
+        if (!isPathAllowed(filePath, allowRootAccess, context?.currentPath)) {
+            return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed.`));
+        }
+
+        let resolvedPath: string;
+        if (context?.currentPath && !path.isAbsolute(filePath)) {
+          resolvedPath = path.resolve(context.currentPath, filePath);
+        } else {
+          resolvedPath = path.resolve(filePath);
+        }
+
+        // Ensure directory exists
+        const dir = path.dirname(resolvedPath);
+        await fs.mkdir(dir, { recursive: true });
+
+        await fs.writeFile(resolvedPath, fileContent, 'utf8');
+
+        res.json(createResponse(true, {
+            toolCallId: toolCall.id,
+            result: { message: `File written successfully to ${resolvedPath}` },
+            message: 'File written successfully'
         }));
         break;
       }

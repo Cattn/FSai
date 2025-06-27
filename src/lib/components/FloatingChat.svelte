@@ -2,11 +2,13 @@
     import { fly, scale, fade } from 'svelte/transition';
     import { backOut, quintOut } from 'svelte/easing';
     import { parseMarkdown, isMarkdown } from '$lib/markdown.js';
+    import type { ToolCall } from '$lib/api';
     
     export let visible = false;
     export let messages: Array<{id: string, type: 'user' | 'ai' | 'system', content: string, timestamp: Date}> = [];
     export let onClose = () => {};
     export let onNewChat = () => {};
+    export let pendingToolCalls: ToolCall[] = [];
     
     function handleClose() {
         onClose();
@@ -25,6 +27,11 @@
     let previousMessageCount = 0;
     let shouldAutoScroll = true;
     
+    let writeFilePreviews: ToolCall[] = [];
+	$: writeFilePreviews = pendingToolCalls.filter(
+		(tc) => tc.type === 'write_file' && tc.parameters.path && tc.parameters.content
+	);
+    
     // Check if user is near the bottom of the chat
     function isNearBottom(): boolean {
         if (!chatContainer) return true;
@@ -38,7 +45,7 @@
     }
     
     // Auto-scroll only when new messages arrive and user was at bottom
-    $: if (chatContainer && messages.length > previousMessageCount) {
+    $: if (chatContainer && (messages.length > previousMessageCount || writeFilePreviews.length > 0)) {
         if (shouldAutoScroll) {
             setTimeout(() => {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -163,6 +170,36 @@
                         {/if}
                     </div>
                 {/each}
+
+                {#if writeFilePreviews.length > 0}
+                    <div class="system-message" transition:scale={{ duration: 200, start: 0.95, delay: 100 }}>
+                        <div class="flex justify-center">
+                            <div 
+                                class="px-3 py-1 rounded-full text-xs"
+                                style="background: rgb(var(--m3-scheme-surface-container-highest)); color: rgb(var(--m3-scheme-on-surface-variant));"
+                            >
+                                File Write Previews
+                            </div>
+                        </div>
+                    </div>
+                    {#each writeFilePreviews as toolCall (toolCall.id)}
+                        <div class="ai-message" transition:fade={{ duration: 300, delay: 200 * toolCall.id.length }}>
+                            <div class="flex justify-start w-full">
+                                <div 
+                                    class="max-w-full w-full p-3 rounded-lg"
+                                    style="background: rgb(var(--m3-scheme-surface-container-low)); color: rgb(var(--m3-scheme-on-surface)); border-radius: 16px 16px 16px 4px; border: 1px solid rgb(var(--m3-scheme-outline-variant));"
+                                >
+                                    <div class="text-xs font-medium pb-1 mb-2 border-b" style="border-color: rgb(var(--m3-scheme-outline-variant));">
+                                        📝 Preview: Write to <code class="text-xs">{toolCall.parameters.path}</code>
+                                    </div>
+                                    <div class="text-sm leading-relaxed max-h-48 overflow-y-auto preview-content">
+                                        <pre class="whitespace-pre-wrap">{@html toolCall.parameters.content}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {/each}
+                {/if}
             </div>
         </div>
     </div>
@@ -303,5 +340,28 @@
 
     :global(.message > div > *:last-child) {
         margin-bottom: 0;
+    }
+
+    .preview-content::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    .preview-content::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .preview-content::-webkit-scrollbar-thumb {
+        background: rgb(var(--m3-scheme-outline-variant));
+        border-radius: 2px;
+    }
+    
+    .preview-content::-webkit-scrollbar-thumb:hover {
+        background: rgb(var(--m3-scheme-outline));
+    }
+
+    .preview-content pre {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.8125rem;
+        color: rgb(var(--m3-scheme-on-surface-variant));
     }
 </style>
