@@ -35,7 +35,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file' | 'navigate_user';
+  type: 'read_file' | 'delete_item' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file' | 'navigate_user';
   parameters: {
     path?: string;
     from?: string;
@@ -44,6 +44,7 @@ interface ToolCall {
     content?: string;
     sourcePath?: string;
     destinationPath?: string;
+    newName?: string;
   };
   description: string;
   risk: 'low' | 'high';
@@ -153,6 +154,14 @@ class FSaiAPI {
 
   static async deleteFile(path: string): Promise<ApiResponse<{ message: string; path: string }>> {
     return this.makeApiRequest('/fs/delete', { method: 'POST', body: { path } });
+  }
+
+  static async renameFile(path: string, newName: string): Promise<ApiResponse<{ message: string; path: string }>> {
+    return this.makeApiRequest('/fs/rename', { method: 'POST', body: { path, newName } });
+  }
+
+  static async copyFile(path: string, destinationPath: string): Promise<ApiResponse<{ message: string; path: string }>> {
+    return this.makeApiRequest('/fs/copy', { method: 'POST', body: { path, destinationPath } });
   }
 
   static async createDirectory(path: string): Promise<ApiResponse<{ message: string; path: string }>> {

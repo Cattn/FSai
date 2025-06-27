@@ -160,7 +160,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file' | 'navigate_user';
+  type: 'read_file' | 'delete_item' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file' | 'navigate_user';
   parameters: {
     path?: string;
     from?: string;
@@ -169,6 +169,7 @@ interface ToolCall {
     content?: string;
     sourcePath?: string;
     destinationPath?: string;
+    newName?: string;
   };
   description: string;
   risk: 'low' | 'high';
@@ -331,6 +332,59 @@ const navigateUserFunction = {
   }
 };
 
+const renameFileFunction = {
+  name: 'rename_file',
+  description: 'Renames a file or directory at the specified path.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path to the file or folder to rename.'
+      },
+      newName: {
+        type: SchemaType.STRING,
+        description: 'The new name for the file or folder.'
+      }
+    },
+    required: ['path', 'newName']
+  }
+};
+
+const deleteItemFunction = {
+  name: 'delete_item',
+  description: 'Deletes a file or directory at the specified path.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path to the file or directory to delete.'
+      }
+    },
+    required: ['path']
+  }
+};
+
+const copyFileFunction = {
+  name: 'copy_file',
+  description: 'Copies a file from a source path to a destination path.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path to the file to copy.'
+      },
+      destinationPath: {
+        type: SchemaType.STRING,
+        description: 'The destination path where the file should be copied.'
+      }
+    },
+    required: ['path', 'destinationPath']
+  }
+};
+
 function generateToolCallId(): string {
   return 'tc_' + Math.random().toString(36).substring(2, 11);
 }
@@ -343,13 +397,12 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
     case 'navigate_user':
     case 'process_file':
     case 'create_directory':
-    case 'rename_file':
     case 'copy_file':
       return 'low';
     case 'write_file':
-    case 'delete_file':
-    case 'move_file':
+    case 'delete_item':
     case 'move_item':
+    case 'rename_file':
       return 'high';
     default:
       return 'high';
@@ -410,10 +463,11 @@ Current directory context:
 ${chatHistoryText}${fileContentsText}
 User request: ${prompt}
 
-You can help with file operations. When appropriate, use the available tools to complete the user's request.
+You can help with file, directory, and navigation operations. When appropriate, use the available tools to complete the user's request.
+Specifically, for the get_tree tool, you should make use of it if you are unsure about the user's request. Try to be specific in your use of the get_tree tool.
 Keep responses brief and focused unless detailed explanation is requested.`;
 
-    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction];
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction, renameFileFunction, deleteItemFunction, copyFileFunction];
     if (settings.multimediaSupport) {
       functionDeclarations.push(processFileFunction);
     }
@@ -456,6 +510,15 @@ Keep responses brief and focused unless detailed explanation is requested.`;
             break;
           case 'navigate_user':
             description = `Navigate to: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'rename_file':
+            description = `Rename file: ${(functionCall.args as any)?.path || 'unknown path'} to ${(functionCall.args as any)?.newName || 'unknown name'}`;
+            break;
+          case 'delete_item':
+            description = `Delete item: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'copy_file':
+            description = `Copy file: ${(functionCall.args as any)?.path || 'unknown path'} to ${(functionCall.args as any)?.destinationPath || 'unknown destination path'}`;
             break;
           default:
             description = `Execute ${functionCall.name}`;
@@ -606,7 +669,7 @@ ${toolResultsText}
 
 Now, analyze the results. If the original request is fully addressed, provide a final, concise response. If more steps are needed, you can use tools again. For example, after reading a file, you might need to move it. Also, inform the user about any actions they denied.`;
 
-    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction];
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction, renameFileFunction, deleteItemFunction, copyFileFunction];
     if (settings.multimediaSupport) {
       functionDeclarations.push(processFileFunction);
     }
@@ -651,6 +714,15 @@ Now, analyze the results. If the original request is fully addressed, provide a 
             break;
           case 'navigate_user':
             description = `Navigate to: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'rename_file':
+            description = `Rename file: ${(functionCall.args as any)?.path || 'unknown path'} to ${(functionCall.args as any)?.newName || 'unknown name'}`;
+            break;
+          case 'delete_item':
+            description = `Delete item: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'copy_file':
+            description = `Copy file: ${(functionCall.args as any)?.path || 'unknown path'} to ${(functionCall.args as any)?.destinationPath || 'unknown destination path'}`;
             break;
           default:
             description = `Execute ${functionCall.name}`;
@@ -860,6 +932,87 @@ app.post('/api/fs/delete', async (req, res) => {
     }
   } catch (error) {
     res.json(createResponse(false, null, `Failed to delete: ${error}`));
+  }
+});
+
+// Rename file or directory
+app.post('/api/fs/rename', async (req, res) => {
+  try {
+    const { path: targetPath, newName } = req.body;
+    
+    if (!targetPath || typeof targetPath !== 'string') {
+      return res.json(createResponse(false, null, 'Path is required'));
+    }
+
+    if (!newName || typeof newName !== 'string') {
+      return res.json(createResponse(false, null, 'New name is required'));
+    }
+
+    if (!isPathAllowed(targetPath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${targetPath}' is disallowed by settings.`));
+    }
+
+    const normalizedPath = path.resolve(targetPath);
+    
+    if (!existsSync(normalizedPath)) {
+      return res.json(createResponse(false, null, 'File or directory does not exist'));
+    }
+
+    const parentDir = path.dirname(normalizedPath);
+    const newPath = path.join(parentDir, newName);
+
+    if (existsSync(newPath)) {
+      return res.json(createResponse(false, null, `A file or directory with the name '${newName}' already exists`));
+    }
+
+    await fs.rename(normalizedPath, newPath);
+    res.json(createResponse(true, { message: `Renamed '${path.basename(normalizedPath)}' to '${newName}'`, path: newPath }));
+  } catch (error) {
+    res.json(createResponse(false, null, `Failed to rename: ${error}`));
+  }
+});
+
+// Copy file
+app.post('/api/fs/copy', async (req, res) => {
+  try {
+    const { path: sourcePath, destinationPath } = req.body;
+    
+    if (!sourcePath || typeof sourcePath !== 'string') {
+      return res.json(createResponse(false, null, 'Source path is required'));
+    }
+
+    if (!destinationPath || typeof destinationPath !== 'string') {
+      return res.json(createResponse(false, null, 'Destination path is required'));
+    }
+
+    if (!isPathAllowed(sourcePath, settings.allowRootAccess) || !isPathAllowed(destinationPath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to one or more paths is disallowed by settings.`));
+    }
+
+    const normalizedSourcePath = path.resolve(sourcePath);
+    const normalizedDestinationPath = path.resolve(destinationPath);
+    
+    if (!existsSync(normalizedSourcePath)) {
+      return res.json(createResponse(false, null, 'Source file does not exist'));
+    }
+
+    const sourceStat = statSync(normalizedSourcePath);
+    if (!sourceStat.isFile()) {
+      return res.json(createResponse(false, null, 'Source path is not a file. Only files can be copied.'));
+    }
+
+    let finalDestinationPath = normalizedDestinationPath;
+    if (existsSync(normalizedDestinationPath) && statSync(normalizedDestinationPath).isDirectory()) {
+      finalDestinationPath = path.join(normalizedDestinationPath, path.basename(normalizedSourcePath));
+    }
+
+    const destDir = path.dirname(finalDestinationPath);
+    await fs.mkdir(destDir, { recursive: true });
+
+    await fs.copyFile(normalizedSourcePath, finalDestinationPath);
+    res.json(createResponse(true, { message: `File copied from '${normalizedSourcePath}' to '${finalDestinationPath}'`, path: finalDestinationPath }));
+  } catch (error) {
+    res.json(createResponse(false, null, `Failed to copy file: ${error}`));
   }
 });
 
@@ -1278,6 +1431,136 @@ app.post('/api/ai/execute-tool', aiLimiter, async (req, res) => {
             message: `Navigate to: ${navigationPath}` 
           },
           message: 'Navigation path validated successfully'
+        }));
+        break;
+      }
+
+      case 'rename_file': {
+        const { path: filePath, newName } = toolCall.parameters;
+
+        if (!filePath || !newName) {
+          return res.json(createResponse(false, null, 'path and newName parameters are required for rename_file'));
+        }
+        if (!isPathAllowed(filePath, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed.`));
+        }
+
+        let normalizedPath: string;
+        if (context?.currentPath && !path.isAbsolute(filePath)) {
+          normalizedPath = path.resolve(context.currentPath, filePath);
+        } else {
+          normalizedPath = path.resolve(filePath);
+        }
+
+        if (!existsSync(normalizedPath)) {
+          return res.json(createResponse(false, null, `File or directory does not exist: ${normalizedPath}`));
+        }
+
+        const parentDir = path.dirname(normalizedPath);
+        const newPath = path.join(parentDir, newName);
+
+        if (existsSync(newPath)) {
+          return res.json(createResponse(false, null, `A file or directory with the name '${newName}' already exists`));
+        }
+
+        await fs.rename(normalizedPath, newPath);
+
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { message: `Renamed '${path.basename(normalizedPath)}' to '${newName}'` },
+          message: 'Item renamed successfully'
+        }));
+        break;
+      }
+
+      case 'delete_item': {
+        const { path: filePath } = toolCall.parameters;
+
+        if (!filePath) {
+          return res.json(createResponse(false, null, 'path parameter is required for delete_item'));
+        }
+        if (!isPathAllowed(filePath, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed.`));
+        }
+
+        let normalizedPath: string;
+        if (context?.currentPath && !path.isAbsolute(filePath)) {
+          normalizedPath = path.resolve(context.currentPath, filePath);
+        } else {
+          normalizedPath = path.resolve(filePath);
+        }
+
+        if (!existsSync(normalizedPath)) {
+          return res.json(createResponse(false, null, `File or directory does not exist: ${normalizedPath}`));
+        }
+
+        const stat = statSync(normalizedPath);
+        
+        if (stat.isDirectory()) {
+          await fs.rmdir(normalizedPath, { recursive: true });
+          res.json(createResponse(true, {
+            toolCallId: toolCall.id,
+            result: { message: `Directory '${path.basename(normalizedPath)}' deleted successfully` },
+            message: 'Directory deleted successfully'
+          }));
+        } else {
+          await fs.unlink(normalizedPath);
+          res.json(createResponse(true, {
+            toolCallId: toolCall.id,
+            result: { message: `File '${path.basename(normalizedPath)}' deleted successfully` },
+            message: 'File deleted successfully'
+          }));
+        }
+        break;
+      }
+
+      case 'copy_file': {
+        const { path: sourcePath, destinationPath } = toolCall.parameters;
+
+        if (!sourcePath || !destinationPath) {
+          return res.json(createResponse(false, null, 'path and destinationPath parameters are required for copy_file'));
+        }
+        if (!isPathAllowed(sourcePath, allowRootAccess, context?.currentPath) || !isPathAllowed(destinationPath, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to one or more paths is disallowed.`));
+        }
+
+        let normalizedSourcePath: string;
+        if (context?.currentPath && !path.isAbsolute(sourcePath)) {
+          normalizedSourcePath = path.resolve(context.currentPath, sourcePath);
+        } else {
+          normalizedSourcePath = path.resolve(sourcePath);
+        }
+
+        let normalizedDestinationPath: string;
+        if (context?.currentPath && !path.isAbsolute(destinationPath)) {
+          normalizedDestinationPath = path.resolve(context.currentPath, destinationPath);
+        } else {
+          normalizedDestinationPath = path.resolve(destinationPath);
+        }
+
+        if (!existsSync(normalizedSourcePath)) {
+          return res.json(createResponse(false, null, `Source file does not exist: ${normalizedSourcePath}`));
+        }
+
+        const sourceStat = statSync(normalizedSourcePath);
+        if (!sourceStat.isFile()) {
+          return res.json(createResponse(false, null, 'Source path is not a file. Only files can be copied with this tool.'));
+        }
+
+        let finalDestinationPath = normalizedDestinationPath;
+        if (existsSync(normalizedDestinationPath) && statSync(normalizedDestinationPath).isDirectory()) {
+          finalDestinationPath = path.join(normalizedDestinationPath, path.basename(normalizedSourcePath));
+        }
+
+        const destDir = path.dirname(finalDestinationPath);
+        await fs.mkdir(destDir, { recursive: true });
+
+        await fs.copyFile(normalizedSourcePath, finalDestinationPath);
+
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { message: `File copied from '${normalizedSourcePath}' to '${finalDestinationPath}'` },
+          message: 'File copied successfully'
         }));
         break;
       }

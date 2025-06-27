@@ -36,6 +36,28 @@ Download a binary for your respective platform from the [Releases](https://githu
 
 ## Notes:
 
+### Tool "Risk":
+```js
+    case 'read_file':
+    case 'read_directory':
+    case 'get_tree':
+    case 'navigate_user':
+    case 'process_file':
+    case 'create_directory':
+    case 'copy_file':
+      return 'low';
+    case 'write_file':
+    case 'delete_file':
+    case 'move_file':
+    case 'move_item':
+    case 'rename_file':
+      return 'high';
+    default:
+      return 'high';
+```
+You can configure the agent to automatically run low-risk tools, which can greatly speed up actions.
+
+
 ### Gemeni API Usage
 You need to provide your own Gemeni API key in settings. The free tier is acceptable for 90% of usage. 
 
@@ -48,6 +70,7 @@ There are 3 configuration options available in settings.
 - Gemeni API Key
 - Allow root access
 - Allow multi-media support
+- Auto-accept low risk tool requests
 
 ## Development 
 
