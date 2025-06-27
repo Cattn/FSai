@@ -22,6 +22,14 @@
   });
 
   $effect(() => {
+    const newPath = $curPath;
+    if (newPath && newPath !== currentPath) {
+      currentPath = newPath;
+      loadDirectory();
+    }
+  });
+
+  $effect(() => {
     const directories = files.filter(file => file.isDirectory).map(file => file.name);
     const fileNames = files.filter(file => file.isFile).map(file => file.name);
     curFolders.set(directories);

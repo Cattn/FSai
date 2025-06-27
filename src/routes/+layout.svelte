@@ -220,6 +220,12 @@
                         return [...filtered, newFileContent].slice(-5);
                     });
                 }
+
+                if (toolCall.type === 'navigate_user' && result.data?.result?.navigationPath) {
+                    const navigationPath = result.data.result.navigationPath;
+                    curPath.set(navigationPath);
+                    addChatMessage('system', `✅ Navigated to: ${navigationPath}`);
+                }
             } else {
                 console.error('Tool call execution failed:', result.error);
                 addChatMessage('system', `❌ ${toolCall.description} failed: ${result.error}`);

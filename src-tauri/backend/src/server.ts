@@ -160,7 +160,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file' | 'navigate_user';
   parameters: {
     path?: string;
     from?: string;
@@ -316,6 +316,21 @@ const moveItemFunction = {
   }
 };
 
+const navigateUserFunction = {
+  name: 'navigate_user',
+  description: 'Navigates the user to a specified path on their file explorer. Use this if the user asks to navigate to a specific path, asks to find something, or asks to see a directory.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The path to navigate to.'
+      }
+    }, 
+    required: ['path']
+  }
+};
+
 function generateToolCallId(): string {
   return 'tc_' + Math.random().toString(36).substring(2, 11);
 }
@@ -325,18 +340,17 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
     case 'read_file':
     case 'read_directory':
     case 'get_tree':
-      return 'low';
+    case 'navigate_user':
     case 'process_file':
+    case 'create_directory':
+    case 'rename_file':
+    case 'copy_file':
       return 'low';
     case 'write_file':
     case 'delete_file':
     case 'move_file':
     case 'move_item':
       return 'high';
-    case 'rename_file':
-    case 'create_directory':
-    case 'copy_file':
-      return 'low';
     default:
       return 'high';
   }
@@ -399,7 +413,7 @@ User request: ${prompt}
 You can help with file operations. When appropriate, use the available tools to complete the user's request.
 Keep responses brief and focused unless detailed explanation is requested.`;
 
-    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction];
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction];
     if (settings.multimediaSupport) {
       functionDeclarations.push(processFileFunction);
     }
@@ -439,6 +453,9 @@ Keep responses brief and focused unless detailed explanation is requested.`;
             break;
           case 'create_directory':
             description = `Create directory '${(functionCall.args as any)?.name}' in '${(functionCall.args as any)?.path}'`;
+            break;
+          case 'navigate_user':
+            description = `Navigate to: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           default:
             description = `Execute ${functionCall.name}`;
@@ -505,6 +522,8 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
     let toolResultsText = '';
     const fileParts: any[] = [];
     const results = Array.isArray(toolResults) ? toolResults : [toolResults];
+    let hasNavigation = false;
+    let navigationPath = '';
 
     for (const toolResult of results) {
         if (toolResult.status === 'denied') {
@@ -535,6 +554,10 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
         } else if (toolResult.result?.tree) { // get_tree
             const path = toolResult.result.path || 'unknown directory';
             toolResultsText += `Directory tree for ${path}:\n${toolResult.result.tree}\n\n`;
+        } else if (toolResult.result?.navigationPath) { // navigate_user
+            hasNavigation = true;
+            navigationPath = toolResult.result.navigationPath;
+            toolResultsText += `Successfully navigated the user to: ${navigationPath}\n\n`;
         } else if (toolResult.result?.message) { // move_item and others
              toolResultsText += `Tool call for '${toolResult.toolCallId}' completed successfully: ${toolResult.result.message}\n\n`;
         } else if (toolResult.error) {
@@ -565,10 +588,14 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
       ).join('\n\n')}\n`;
     }
 
+    const navigationContext = hasNavigation 
+        ? `- Current path: ${context.currentPath} (just navigated here from previous location)`
+        : `- Current path: ${context.currentPath}`;
+
     const followUpPrompt = `You are a helpful file system assistant. Be concise and direct in your responses unless the user specifically asks for detailed explanations.
 
 Current directory context:
-- Current path: ${context.currentPath}
+${navigationContext}
 - Folders: ${context.folders.join(', ') || 'None'}
 - Files: ${context.files.join(', ') || 'None'}
 ${chatHistoryText}${fileContentsText}
@@ -579,7 +606,7 @@ ${toolResultsText}
 
 Now, analyze the results. If the original request is fully addressed, provide a final, concise response. If more steps are needed, you can use tools again. For example, after reading a file, you might need to move it. Also, inform the user about any actions they denied.`;
 
-    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction];
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction, navigateUserFunction];
     if (settings.multimediaSupport) {
       functionDeclarations.push(processFileFunction);
     }
@@ -621,6 +648,9 @@ Now, analyze the results. If the original request is fully addressed, provide a 
             break;
           case 'create_directory':
             description = `Create directory '${(functionCall.args as any)?.name}' in '${(functionCall.args as any)?.path}'`;
+            break;
+          case 'navigate_user':
+            description = `Navigate to: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           default:
             description = `Execute ${functionCall.name}`;
@@ -1213,6 +1243,41 @@ app.post('/api/ai/execute-tool', aiLimiter, async (req, res) => {
           toolCallId: toolCall.id,
           result: { path: normalizedPath, mimeType, data, isFile: true },
           message: 'File processed successfully'
+        }));
+        break;
+      }
+
+      case 'navigate_user': {
+        if (!toolCall.parameters.path) {
+          return res.json(createResponse(false, null, 'Path parameter is required for navigate_user'));
+        }
+        if (!isPathAllowed(toolCall.parameters.path, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
+        }
+
+        let navigationPath: string;
+        if (context?.currentPath && !path.isAbsolute(toolCall.parameters.path)) {
+          navigationPath = path.resolve(context.currentPath, toolCall.parameters.path);
+        } else {
+          navigationPath = path.resolve(toolCall.parameters.path);
+        }
+
+        if (!existsSync(navigationPath)) {
+          return res.json(createResponse(false, null, `Path does not exist: ${navigationPath}`));
+        }
+
+        const navigationStat = statSync(navigationPath);
+        if (!navigationStat.isDirectory()) {
+          return res.json(createResponse(false, null, 'Path is not a directory'));
+        }
+
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { 
+            navigationPath: navigationPath, 
+            message: `Navigate to: ${navigationPath}` 
+          },
+          message: 'Navigation path validated successfully'
         }));
         break;
       }
