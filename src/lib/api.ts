@@ -35,7 +35,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file';
   parameters: {
     path?: string;
     from?: string;
@@ -62,6 +62,7 @@ interface AIResponse {
 export interface Settings {
   apiKey: string;
   allowRootAccess: boolean;
+  multimediaSupport: boolean;
 }
 
 interface ApiRequestOptions extends Omit<RequestInit, 'body'> {

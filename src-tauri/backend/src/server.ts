@@ -7,6 +7,7 @@ import { existsSync, statSync } from 'fs';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import { execSync } from 'child_process';
+import { lookup } from 'mime-types';
 
 // Load environment variables
 dotenv.config();
@@ -14,7 +15,8 @@ dotenv.config();
 const APP_NAME = 'FSai';
 let settings = {
     apiKey: '',
-    allowRootAccess: false
+    allowRootAccess: false,
+    multimediaSupport: false
 };
 
 const resolvedHomeDir = path.resolve(os.homedir());
@@ -108,7 +110,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Types
 interface ApiResponse<T = any> {
@@ -146,7 +148,7 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item' | 'write_file' | 'process_file';
   parameters: {
     path?: string;
     from?: string;
@@ -197,6 +199,21 @@ const readFileFunction = {
       path: {
         type: SchemaType.STRING,
         description: 'The full path to the file to read'
+      }
+    },
+    required: ['path']
+  }
+};
+ 
+const processFileFunction = {
+  name: 'process_file',
+  description: 'Loads an image, PDF, or video file so you can analyze its contents. Use this when the user wants you to watch a video, read a document, or look at an image. After the tool runs, the file\'s content will be available to you, and you can then answer the user\'s question about it. This tool does not work for audio files.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path to the file to process.'
       }
     },
     required: ['path']
@@ -300,6 +317,8 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
     case 'read_directory':
     case 'get_tree':
       return 'low';
+    case 'process_file':
+      return 'low';
     case 'write_file':
     case 'delete_file':
     case 'move_file':
@@ -344,7 +363,7 @@ async function processWithAI(prompt: string, context: AIContext): Promise<AIResp
     }
 
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-flash',
       generationConfig: { temperature: 0 }
     });
 
@@ -377,10 +396,15 @@ User request: ${prompt}
 You can help with file operations. When appropriate, use the available tools to complete the user's request.
 Keep responses brief and focused unless detailed explanation is requested.`;
 
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction];
+    if (settings.multimediaSupport) {
+      functionDeclarations.push(processFileFunction);
+    }
+
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
       tools: [{
-        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction]
+        functionDeclarations: functionDeclarations
       }]
     });
 
@@ -395,6 +419,9 @@ Keep responses brief and focused unless detailed explanation is requested.`;
         switch(functionCall.name) {
           case 'read_file':
             description = `Read file: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'process_file':
+            description = `Process file: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           case 'write_file':
             description = `Write to file: ${(functionCall.args as any)?.path || 'unknown path'}`;
@@ -473,11 +500,12 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
     }
 
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-flash',
       generationConfig: { temperature: 0 }
     });
 
     let toolResultsText = '';
+    const fileParts: any[] = [];
     const results = Array.isArray(toolResults) ? toolResults : [toolResults];
 
     for (const toolResult of results) {
@@ -486,7 +514,15 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
             continue;
         }
 
-        if (toolResult.result?.content) { // read_file
+        if (toolResult.result?.isFile && toolResult.result?.mimeType && toolResult.result?.data) { // process_file
+            fileParts.push({ 
+                inlineData: { 
+                    mimeType: toolResult.result.mimeType, 
+                    data: toolResult.result.data 
+                } 
+            });
+            toolResultsText += `The file ${toolResult.result.path} has been processed and is included in the context for analysis.\n\n`;
+        } else if (toolResult.result?.content) { // read_file
             const path = toolResult.result.path || 'unknown file';
             const content = toolResult.result.content;
             if (content.length > 2000) {
@@ -547,10 +583,17 @@ ${toolResultsText}
 
 Now, analyze the results. If the original request is fully addressed, provide a final, concise response. If more steps are needed, you can use tools again. For example, after reading a file, you might need to move it. Also, inform the user about any actions they denied.`;
 
+    const functionDeclarations = [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction];
+    if (settings.multimediaSupport) {
+      functionDeclarations.push(processFileFunction);
+    }
+    
+    const userParts = [{ text: followUpPrompt }, ...fileParts];
+
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: followUpPrompt }] }],
+      contents: [{ role: 'user', parts: userParts }],
       tools: [{
-        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction, writeFileFunction]
+        functionDeclarations: functionDeclarations
       }]
     });
 
@@ -565,6 +608,9 @@ Now, analyze the results. If the original request is fully addressed, provide a 
         switch(functionCall.name) {
           case 'read_file':
             description = `Read file: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'process_file':
+            description = `Process file: ${(functionCall.args as any)?.path || 'unknown path'}`;
             break;
           case 'write_file':
             description = `Write to file: ${(functionCall.args as any)?.path || 'unknown path'}`;
@@ -1144,6 +1190,63 @@ app.post('/api/ai/execute-tool', async (req, res) => {
             toolCallId: toolCall.id,
             result: { message: `File written successfully to ${resolvedPath}` },
             message: 'File written successfully'
+        }));
+        break;
+      }
+
+      case 'process_file': {
+        if (!toolCall.parameters.path) {
+          return res.json(createResponse(false, null, 'Path parameter is required for process_file'));
+        }
+        if (!isPathAllowed(toolCall.parameters.path, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
+        }
+
+        let normalizedPath: string;
+        if (context?.currentPath && !path.isAbsolute(toolCall.parameters.path)) {
+          normalizedPath = path.resolve(context.currentPath, toolCall.parameters.path);
+        } else {
+          normalizedPath = path.resolve(toolCall.parameters.path);
+        }
+
+        if (!existsSync(normalizedPath)) {
+          return res.json(createResponse(false, null, `File does not exist: ${normalizedPath}`));
+        }
+        
+        const stat = statSync(normalizedPath);
+        if (!stat.isFile()) {
+          return res.json(createResponse(false, null, 'Path is not a file'));
+        }
+
+        const mimeType = lookup(normalizedPath) || 'application/octet-stream';
+
+        const supportedImageMimes = ['image/png', 'image/jpeg', 'image/webp'];
+        const supportedPdfMimes = ['application/pdf'];
+        const supportedVideoMimes = ['video/x-flv', 'video/quicktime', 'video/mpeg', 'video/mp4', 'video/webm', 'video/wmv', 'video/3gpp'];
+        const isSupportedImage = supportedImageMimes.includes(mimeType);
+        const isSupportedPdf = supportedPdfMimes.includes(mimeType);
+        const isSupportedVideo = supportedVideoMimes.includes(mimeType);
+
+        if (!isSupportedImage && !isSupportedPdf && !isSupportedVideo) {
+          return res.json(createResponse(false, null, `Unsupported file type: ${mimeType}. This tool supports images (PNG, JPEG, WEBP), PDFs, and videos.`));
+        }
+
+        const MAX_IMAGE_PDF_SIZE = 7 * 1024 * 1024; // 7 MB
+        const MAX_VIDEO_SIZE = 45 * 1024 * 1024; // 45 MB
+
+        if ((isSupportedImage || isSupportedPdf) && stat.size > MAX_IMAGE_PDF_SIZE) {
+          return res.json(createResponse(false, null, `File size (${(stat.size / 1024 / 1024).toFixed(2)} MB) exceeds the 7 MB limit for images and PDFs.`));
+        }
+        if (isSupportedVideo && stat.size > MAX_VIDEO_SIZE) {
+          return res.json(createResponse(false, null, `File size (${(stat.size / 1024 / 1024).toFixed(2)} MB) exceeds the 45 MB limit for videos.`));
+        }
+
+        const data = await fs.readFile(normalizedPath, 'base64');
+
+        res.json(createResponse(true, { 
+          toolCallId: toolCall.id,
+          result: { path: normalizedPath, mimeType, data, isFile: true },
+          message: 'File processed successfully'
         }));
         break;
       }

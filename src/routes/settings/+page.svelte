@@ -6,6 +6,7 @@
 
   let apiKey = $state('');
   let allowRootAccess = $state(false);
+  let multimediaSupport = $state(false);
   let statusMessage = $state('');
 
   onMount(async () => {
@@ -18,13 +19,15 @@
   $effect(() => {
     apiKey = $settings.apiKey;
     allowRootAccess = $settings.allowRootAccess;
+    multimediaSupport = $settings.multimediaSupport;
   });
 
   async function saveSettings() {
     statusMessage = 'Saving...';
     const newSettings = {
         apiKey: apiKey,
-        allowRootAccess: allowRootAccess
+        allowRootAccess: allowRootAccess,
+        multimediaSupport: multimediaSupport
     };
     const result = await FSaiAPI.saveSettings(newSettings);
     if (result.success && result.data) {
@@ -66,6 +69,14 @@
                     <p class="m3-font-body-medium" style="color: rgb(var(--m3-scheme-on-surface-variant));">Allow the AI to access files outside of your home directory. Use with caution.</p>
                 </div>
                 <Switch bind:checked={allowRootAccess} />
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-text">
+                    <p class="m3-font-body-large">Multi-media Support</p>
+                    <p class="m3-font-body-medium" style="color: rgb(var(--m3-scheme-on-surface-variant));">Allow the AI to process images, videos, and PDFs. This may use more resources.</p>
+                </div>
+                <Switch bind:checked={multimediaSupport} />
             </div>
 
             <div class="actions">

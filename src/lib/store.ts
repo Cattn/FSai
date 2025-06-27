@@ -52,5 +52,6 @@ export const executedToolResults = writable<ToolResult[]>([]);
 
 export const settings = writable({
     apiKey: '',
-    allowRootAccess: false
+    allowRootAccess: false,
+    multimediaSupport: false
 });
