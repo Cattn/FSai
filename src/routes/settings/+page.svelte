@@ -42,7 +42,7 @@
 
 <main class="m3-container">
   <div class="header-section">
-    <h1 class="m3-font-display-large">Settings</h1>
+    <h1 class="m3-font-display-large">FSai Settings</h1>
     <p class="m3-font-title-medium subtitle">Configure FSai behavior</p>
     <div class="subtitle-decoration"></div>
   </div>
@@ -53,7 +53,7 @@
             <h2 class="m3-font-headline-small">General Settings</h2>
             <div class="setting-item">
                 <div class="setting-text">
-                    <p class="m3-font-body-large">Gemini API Key</p>
+                    <p class="m3-font-body-large">Gemini API Key</p>  
                     <p class="m3-font-body-medium" style="color: rgb(var(--m3-scheme-on-surface-variant));">Your Google AI API key. This is stored locally and sent securely to the backend.</p>
                 </div>
                 <TextField 
@@ -107,8 +107,12 @@
   }
 
   .header-section h1 {
-    color: rgb(var(--m3-scheme-primary));
     margin: 0 0 0.5rem 0;
+    font-weight: 600;
+    color: rgb(var(--m3-scheme-primary-container));
+    text-shadow:
+      0 0 5px rgb(var(--m3-scheme-primary) / 0.5),
+      0 0 10px rgb(var(--m3-scheme-secondary-container) / 0.3);
   }
 
   .header-section p {

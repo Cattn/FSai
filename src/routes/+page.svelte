@@ -591,8 +591,12 @@
   }
 
   .header-section h1 {
-    color: rgb(var(--m3-scheme-primary));
     margin: 0 0 0.5rem 0;
+    font-weight: 600;
+    color: rgb(var(--m3-scheme-primary-container));
+    text-shadow:
+      0 0 5px rgb(var(--m3-scheme-primary) / 0.5),
+      0 0 10px rgb(var(--m3-scheme-secondary-container) / 0.3);
   }
 
   .header-section p {
