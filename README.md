@@ -13,6 +13,7 @@
     <img src="https://play.maple.music/SMS/uploads/Screenshot%202025-06-27%20170908.png" alt="FSai Screenshot">
 </p>
 
+https://github.com/user-attachments/assets/d787f041-0c46-47c3-9009-e26657c06fb6
 
 ## Installation
 
