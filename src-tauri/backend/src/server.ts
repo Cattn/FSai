@@ -11,6 +11,68 @@ import { execSync } from 'child_process';
 // Load environment variables
 dotenv.config();
 
+const APP_NAME = 'FSai';
+let settings = {
+    apiKey: '',
+    allowRootAccess: false
+};
+
+const resolvedHomeDir = path.resolve(os.homedir());
+
+function isPathAllowed(p: string | undefined, allowRoot: boolean, currentPath?: string): boolean {
+    if (allowRoot) return true;
+    if (!p) return true; // A missing path is not a security violation, let handlers reject it.
+
+    let resolvedPath: string;
+    if (currentPath && !path.isAbsolute(p)) {
+        resolvedPath = path.resolve(currentPath, p);
+    } else {
+        resolvedPath = path.resolve(p);
+    }
+
+    return resolvedPath.startsWith(resolvedHomeDir);
+}
+
+function getAppDataPath(): string {
+    switch (os.platform()) {
+        case 'win32':
+            return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+        case 'darwin':
+            return path.join(os.homedir(), 'Library', 'Application Support');
+        case 'linux':
+            return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+        default:
+            return path.join(os.homedir(), '.config');
+    }
+}
+
+async function loadSettings() {
+    const configDir = path.join(getAppDataPath(), APP_NAME);
+    const configFile = path.join(configDir, 'settings.json');
+    try {
+        if (existsSync(configFile)) {
+            const fileContent = await fs.readFile(configFile, 'utf-8');
+            const loadedSettings = JSON.parse(fileContent);
+            settings = { ...settings, ...loadedSettings };
+            console.log('⚙️ Settings loaded from', configFile);
+        }
+    } catch (error) {
+        console.warn('Could not load settings file:', error);
+    }
+}
+
+async function saveSettings() {
+    const configDir = path.join(getAppDataPath(), APP_NAME);
+    const configFile = path.join(configDir, 'settings.json');
+    try {
+        await fs.mkdir(configDir, { recursive: true });
+        await fs.writeFile(configFile, JSON.stringify(settings, null, 2), 'utf-8');
+        console.log('⚙️ Settings saved to', configFile);
+    } catch (error) {
+        console.error('Could not save settings file:', error);
+    }
+}
+
 // Function to read environment variable from system
 function readSystemEnvVariable(variableName: string): string {
   try {
@@ -39,7 +101,8 @@ function readSystemEnvVariable(variableName: string): string {
 }
 
 // Get GEMINI_API_KEY from system environment
-const GEMINI_API_KEY = readSystemEnvVariable('GEMINI_API_KEY');
+const systemGeminiKey = readSystemEnvVariable('GEMINI_API_KEY');
+let GEMINI_API_KEY = '';
 
 const app = express();
 
@@ -76,6 +139,9 @@ interface AIContext {
       content: string;
     }>;
   };
+  settings?: {
+    allowRootAccess?: boolean;
+  }
 }
 
 interface ToolCall {
@@ -109,7 +175,17 @@ function createResponse<T>(success: boolean, data?: T, error?: string): ApiRespo
 }
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || '');
+let genAI: GoogleGenerativeAI;
+
+function initializeGenAI() {
+    GEMINI_API_KEY = settings.apiKey || systemGeminiKey;
+    if (GEMINI_API_KEY) {
+        genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        console.log('✨ Gemini AI initialized successfully.');
+    } else {
+        console.warn('⚠️ Gemini API key not found. AI functionality will be limited.');
+    }
+}
 
 // Tool function definitions for Gemini
 const readFileFunction = {
@@ -243,6 +319,10 @@ async function processWithAI(prompt: string, context: AIContext): Promise<AIResp
     console.log('🤖 Processing AI request with prompt:', prompt.substring(0, 50) + '...');
     console.log('🔑 API key available for request:', !!GEMINI_API_KEY);
     
+    if (!genAI) {
+        return { response: 'AI is not configured. Please set the API key in settings.' };
+    }
+
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
       generationConfig: { temperature: 0 }
@@ -365,6 +445,10 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
     console.log('🤖 Processing follow-up AI request with original prompt:', originalPrompt.substring(0, 50) + '...');
     console.log('🔧 Tool results:', JSON.stringify(toolResults).substring(0, 100) + '...');
     
+    if (!genAI) {
+        return { response: 'AI is not configured. Please set the API key in settings.' };
+    }
+
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
       generationConfig: { temperature: 0 }
@@ -500,6 +584,28 @@ app.get('/health', (req, res) => {
   res.json(createResponse(true, { message: 'FSai Backend is running' }));
 });
 
+app.get('/api/settings', (req, res) => {
+    res.json(createResponse(true, settings));
+});
+
+app.post('/api/settings', async (req, res) => {
+    try {
+        const newSettings = req.body;
+        settings = { ...settings, ...newSettings };
+        await saveSettings();
+        
+        // Re-initialize AI with new key if it changed
+        if (newSettings.apiKey !== undefined) {
+            initializeGenAI();
+        }
+        
+        res.json(createResponse(true, settings));
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        res.json(createResponse(false, null, `Failed to save settings: ${error}`));
+    }
+});
+
 app.get('/api/fs/home', (req, res) => {
   try {
     const homeDir = os.homedir();
@@ -526,6 +632,10 @@ app.post('/api/fs/list', async (req, res) => {
     
     if (!dirPath || typeof dirPath !== 'string') {
       return res.json(createResponse(false, null, 'Path is required'));
+    }
+
+    if (!isPathAllowed(dirPath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${dirPath}' is disallowed by settings.`));
     }
 
     // Normalize path for Windows
@@ -583,6 +693,10 @@ app.post('/api/fs/read', async (req, res) => {
       return res.json(createResponse(false, null, 'Path is required'));
     }
 
+    if (!isPathAllowed(filePath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed by settings.`));
+    }
+
     const normalizedPath = path.resolve(filePath);
     
     if (!existsSync(normalizedPath)) {
@@ -611,6 +725,10 @@ app.post('/api/fs/write', async (req, res) => {
       return res.json(createResponse(false, null, 'Path is required'));
     }
 
+    if (!isPathAllowed(filePath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${filePath}' is disallowed by settings.`));
+    }
+
     if (typeof content !== 'string') {
       return res.json(createResponse(false, null, 'Content must be a string'));
     }
@@ -636,6 +754,10 @@ app.post('/api/fs/delete', async (req, res) => {
     
     if (!targetPath || typeof targetPath !== 'string') {
       return res.json(createResponse(false, null, 'Path is required'));
+    }
+
+    if (!isPathAllowed(targetPath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${targetPath}' is disallowed by settings.`));
     }
 
     const normalizedPath = path.resolve(targetPath);
@@ -666,6 +788,10 @@ app.post('/api/fs/mkdir', async (req, res) => {
     
     if (!dirPath || typeof dirPath !== 'string') {
       return res.json(createResponse(false, null, 'Path is required'));
+    }
+
+    if (!isPathAllowed(dirPath, settings.allowRootAccess)) {
+        return res.json(createResponse(false, null, `Access to path '${dirPath}' is disallowed by settings.`));
     }
 
     const normalizedPath = path.resolve(dirPath);
@@ -712,11 +838,16 @@ app.post('/api/ai/execute-tool', async (req, res) => {
       return res.json(createResponse(false, null, 'Valid toolCall is required'));
     }
 
+    const allowRootAccess = context?.settings?.allowRootAccess ?? settings.allowRootAccess;
+
     // Execute the tool call based on type
     switch (toolCall.type) {
       case 'read_file':
         if (!toolCall.parameters.path) {
           return res.json(createResponse(false, null, 'Path parameter is required for read_file'));
+        }
+        if (!isPathAllowed(toolCall.parameters.path, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
         }
         
         console.log('🔍 Tool call path received:', toolCall.parameters.path);
@@ -753,6 +884,9 @@ app.post('/api/ai/execute-tool', async (req, res) => {
       case 'read_directory':
         if (!toolCall.parameters.path) {
             return res.json(createResponse(false, null, 'Path parameter is required for read_directory'));
+        }
+        if (!isPathAllowed(toolCall.parameters.path, allowRootAccess, context?.currentPath)) {
+            return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
         }
 
         const dirPath = toolCall.parameters.path;
@@ -808,6 +942,9 @@ app.post('/api/ai/execute-tool', async (req, res) => {
         if (!toolCall.parameters.path) {
           return res.json(createResponse(false, null, 'Path parameter is required for get_tree'));
         }
+        if (!isPathAllowed(toolCall.parameters.path, allowRootAccess, context?.currentPath)) {
+          return res.json(createResponse(false, null, `Access to path '${toolCall.parameters.path}' is disallowed.`));
+        }
 
         const treeDirPath = toolCall.parameters.path;
         let normalizedTreePath: string;
@@ -840,6 +977,9 @@ app.post('/api/ai/execute-tool', async (req, res) => {
 
         if (!sourcePath || !destinationPath) {
           return res.json(createResponse(false, null, 'sourcePath and destinationPath are required for move_item'));
+        }
+        if (!isPathAllowed(sourcePath, allowRootAccess, context?.currentPath) || !isPathAllowed(destinationPath, allowRootAccess, context?.currentPath)) {
+            return res.json(createResponse(false, null, `Access to one or more paths is disallowed.`));
         }
 
         let normalizedSourcePath: string;
@@ -881,6 +1021,9 @@ app.post('/api/ai/execute-tool', async (req, res) => {
 
         if (!dirPath || !folderName) {
           return res.json(createResponse(false, null, 'path and name parameters are required for create_directory'));
+        }
+        if (!isPathAllowed(dirPath, allowRootAccess, context?.currentPath)) {
+            return res.json(createResponse(false, null, `Access to path '${dirPath}' is disallowed.`));
         }
 
         let normalizedPath: string;
@@ -937,31 +1080,38 @@ app.post('/api/ai/process-followup', async (req, res) => {
   }
 });
 
+async function startServer() {
+    await loadSettings();
+    initializeGenAI();
+
+    const server = app.listen(PORT, '127.0.0.1', () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+            const actualPort = address.port;
+            console.log(`BACKEND_PORT:${actualPort}`);
+            console.log(`FSai backend server running on http://127.0.0.1:${actualPort}`);
+        }
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+        console.log('Received SIGTERM, shutting down gracefully');
+        server.close(() => {
+            console.log('Server closed');
+            process.exit(0);
+        });
+    });
+
+    process.on('SIGINT', () => {
+        console.log('Received SIGINT, shutting down gracefully');
+        server.close(() => {
+            console.log('Server closed');
+            process.exit(0);
+        });
+    });
+}
+
 // Start server
 const PORT = parseInt(process.env.PORT || '0'); // Parse to number
 
-const server = app.listen(PORT, '127.0.0.1', () => {
-  const address = server.address();
-  if (address && typeof address === 'object') {
-    const actualPort = address.port;
-    console.log(`BACKEND_PORT:${actualPort}`);
-    console.log(`FSai backend server running on http://127.0.0.1:${actualPort}`);
-  }
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+startServer();

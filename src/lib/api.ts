@@ -30,6 +30,7 @@ interface AIContext {
       content: string;
     }>;
   };
+  settings?: Settings;
 }
 
 interface ToolCall {
@@ -56,6 +57,15 @@ interface AIRequest {
 interface AIResponse {
   response: string;
   toolCalls?: ToolCall[];
+}
+
+export interface Settings {
+  apiKey: string;
+  allowRootAccess: boolean;
+}
+
+interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
+  body?: any;
 }
 
 class FSaiAPI {
@@ -106,67 +116,79 @@ class FSaiAPI {
     }
   }
 
-  private static async makeRequest<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  private static async request<T>(url: string, options: RequestInit = {}): Promise<T> {
     await this.ensureBackendReady();
     
-    const response = await fetch(`http://127.0.0.1:${this.backendPort}/api${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data || {})
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        },
     });
     
     return response.json();
   }
 
+  private static async makeApiRequest<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<ApiResponse<T>> {
+    const url = `http://127.0.0.1:${this.backendPort}/api${endpoint}`;
+    
+    const fetchOptions: RequestInit = { ...options };
+
+    if (options.body) {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+
+    return this.request(url, fetchOptions);
+  }
+
   static async listDirectory(path: string): Promise<ApiResponse<FileItem[]>> {
-    return this.makeRequest('/fs/list', { path });
+    return this.makeApiRequest('/fs/list', { method: 'POST', body: { path } });
   }
 
   static async readFile(path: string): Promise<ApiResponse<{ content: string; path: string }>> {
-    return this.makeRequest('/fs/read', { path });
+    return this.makeApiRequest('/fs/read', { method: 'POST', body: { path } });
   }
 
   static async writeFile(path: string, content: string): Promise<ApiResponse<{ message: string; path: string }>> {
-    return this.makeRequest('/fs/write', { path, content });
+    return this.makeApiRequest('/fs/write', { method: 'POST', body: { path, content } });
   }
 
   static async deleteFile(path: string): Promise<ApiResponse<{ message: string; path: string }>> {
-    return this.makeRequest('/fs/delete', { path });
+    return this.makeApiRequest('/fs/delete', { method: 'POST', body: { path } });
   }
 
   static async createDirectory(path: string): Promise<ApiResponse<{ message: string; path: string }>> {
-    return this.makeRequest('/fs/mkdir', { path });
+    return this.makeApiRequest('/fs/mkdir', { method: 'POST', body: { path } });
   }
 
   static async healthCheck(): Promise<ApiResponse> {
-    await this.ensureBackendReady();
-    
-    const response = await fetch(`http://127.0.0.1:${this.backendPort}/health`);
-    return response.json();
+    const url = `http://127.0.0.1:${this.backendPort}/health`;
+    return this.request(url);
   }
 
   static async getHomeDirectory(): Promise<ApiResponse<{ path: string; platform?: string }>> {
-    await this.ensureBackendReady();
-    
-    const response = await fetch(`http://127.0.0.1:${this.backendPort}/api/fs/home`);
-    return response.json();
+    return this.makeApiRequest('/fs/home', { method: 'GET' });
   }
 
   static async processWithAI(prompt: string, context: AIContext): Promise<ApiResponse<AIResponse>> {
-    return this.makeRequest('/ai/process', { prompt, context });
+    return this.makeApiRequest('/ai/process', { method: 'POST', body: { prompt, context } });
   }
 
   static async executeToolCall(toolCall: ToolCall, context?: AIContext): Promise<ApiResponse> {
-    return this.makeRequest('/ai/execute-tool', { toolCall, context });
+    return this.makeApiRequest('/ai/execute-tool', { method: 'POST', body: { toolCall, context } });
   }
 
-  static async processFollowUp(originalPrompt: string, context: AIContext, toolResults: any): Promise<ApiResponse<AIResponse>> {
-    return this.makeRequest('/ai/process-followup', { originalPrompt, context, toolResults });
+  static async processFollowUp(originalPrompt: string, context: AIContext, toolResults: any[]): Promise<ApiResponse<AIResponse>> {
+    return this.makeApiRequest('/ai/process-followup', {
+      method: 'POST',
+      body: { originalPrompt, context, toolResults }
+    });
   }
 
   static async checkFileType(path: string): Promise<ApiResponse<{ isText: boolean; reason?: string }>> {
     try {
-      return await this.makeRequest('/fs/check-type', { path });
+      return await this.makeApiRequest('/fs/check-type', { method: 'POST', body: { path } });
     } catch (error) {
       console.error('checkFileType API call failed:', error);
       return {
@@ -174,6 +196,17 @@ class FSaiAPI {
         error: `API call failed: ${error}`
       };
     }
+  }
+
+  static async getSettings(): Promise<ApiResponse<Settings>> {
+    return this.makeApiRequest('/settings', { method: 'GET' });
+  }
+
+  static async saveSettings(settings: Partial<Settings>): Promise<ApiResponse<Settings>> {
+    return this.makeApiRequest('/settings', {
+      method: 'POST',
+      body: settings
+    });
   }
 }
 

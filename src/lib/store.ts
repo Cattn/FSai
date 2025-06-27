@@ -49,3 +49,8 @@ export interface ToolResult {
   error?: string;
 }
 export const executedToolResults = writable<ToolResult[]>([]);
+
+export const settings = writable({
+    apiKey: '',
+    allowRootAccess: false
+});

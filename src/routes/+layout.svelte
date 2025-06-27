@@ -18,13 +18,57 @@
         aiProcessing,
         executedToolResults,
         type ChatMessage,
-        type ReadFileContent
+        type ReadFileContent,
+        settings
     } from '$lib/store.js';
     import { quintOut } from 'svelte/easing';
     import { fade } from 'svelte/transition';
 
     let initialToolCallCount = 0;
     let floatingBarHeight = 0;
+
+    onMount(() => {
+        // Load settings from backend on startup
+        FSaiAPI.getSettings().then(result => {
+            if (result.success && result.data) {
+                settings.set(result.data);
+            }
+        });
+
+        function handleKeydown(event: KeyboardEvent) {
+            // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+            if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+                event.preventDefault();
+                chatVisible.update((v) => !v);
+            }
+
+            // Hide bottom bar on Escape
+            if (event.key === 'Escape') {
+                chatVisible.set(false);
+                confirmationDetails.set(null);
+                pendingToolCalls.set([]);
+                executedToolResults.set([]);
+                initialToolCallCount = 0;
+            }
+
+            // Enter to accept single, low-risk tool call
+            if (
+                event.key === 'Enter' &&
+                $pendingToolCalls.length === 1 &&
+                $pendingToolCalls[0].risk === 'low' &&
+                $confirmationDetails
+            ) {
+                event.preventDefault();
+                handleToolAction($pendingToolCalls[0], 'accept');
+            }
+        }
+
+        window.addEventListener('keydown', handleKeydown);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeydown);
+        };
+    });
 
     // Subscribe to stores
     $: if ($pendingToolCalls.length > 0) {
@@ -78,7 +122,8 @@
             chatHistory: {
                 messages: contextMessages,
                 fileContents: recentFileContents
-            }
+            },
+            settings: $settings
         };
     }
 
@@ -289,42 +334,6 @@
         // Add a welcome message
         addChatMessage('system', 'New chat started');
     }
-
-    onMount(() => {
-        function handleKeydown(event: KeyboardEvent) {
-            // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
-            if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-                event.preventDefault();
-                chatVisible.update((v) => !v);
-            }
-
-            // Hide bottom bar on Escape
-            if (event.key === 'Escape') {
-                chatVisible.set(false);
-                confirmationDetails.set(null);
-                pendingToolCalls.set([]);
-                executedToolResults.set([]);
-                initialToolCallCount = 0;
-            }
-
-            // Enter to accept single, low-risk tool call
-            if (
-                event.key === 'Enter' &&
-                $pendingToolCalls.length === 1 &&
-                $pendingToolCalls[0].risk === 'low' &&
-                $confirmationDetails
-            ) {
-                event.preventDefault();
-                handleToolAction($pendingToolCalls[0], 'accept');
-            }
-        }
-
-        window.addEventListener('keydown', handleKeydown);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeydown);
-        };
-    });
 </script>
 
 <slot />
