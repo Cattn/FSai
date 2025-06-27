@@ -28,7 +28,6 @@
     let floatingBarHeight = 0;
 
     onMount(() => {
-        // Load settings from backend on startup
         FSaiAPI.getSettings().then(result => {
             if (result.success && result.data) {
                 settings.set(result.data);
@@ -36,13 +35,11 @@
         });
 
         function handleKeydown(event: KeyboardEvent) {
-            // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
             if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
                 event.preventDefault();
                 chatVisible.update((v) => !v);
             }
 
-            // Hide bottom bar on Escape
             if (event.key === 'Escape') {
                 chatVisible.set(false);
                 confirmationDetails.set(null);
@@ -51,7 +48,6 @@
                 initialToolCallCount = 0;
             }
 
-            // Enter to accept single, low-risk tool call
             if (
                 event.key === 'Enter' &&
                 $pendingToolCalls.length === 1 &&
@@ -70,7 +66,6 @@
         };
     });
 
-    // Subscribe to stores
     $: if ($pendingToolCalls.length > 0) {
         if (initialToolCallCount === 0) {
             initialToolCallCount = $pendingToolCalls.length;
@@ -85,7 +80,6 @@
         confirmationDetails.set(null);
     }
 
-    // When all tools have been actioned, run the follow-up
     $: if (
         $executedToolResults.length > 0 &&
         $executedToolResults.length === initialToolCallCount &&
@@ -99,7 +93,6 @@
     }
 
     function buildAIContext(): AIContext {
-        // Get current chat messages, excluding system messages for context
         const contextMessages = $chatMessages
             .filter((msg) => msg.type !== 'system')
             .slice(-10) // Keep last 10 messages to limit context size
@@ -109,7 +102,6 @@
                 timestamp: msg.timestamp
             }));
 
-        // Get file contents, keep only the most recent 3 files to limit context size
         const recentFileContents = $readFileContents.slice(-3).map((file) => ({
             path: file.path,
             content: file.content
@@ -128,7 +120,6 @@
     }
 
     function addChatMessage(type: 'user' | 'ai' | 'system', content: any) {
-        // Ensure content is always a string
         let stringContent: string;
         if (typeof content === 'string') {
             stringContent = content;
@@ -150,33 +141,21 @@
     }
 
     async function handleBottomBarSubmit(inputValue: string) {
-        console.log('AI Prompt submitted:', inputValue);
-
-        // Add user message to chat
         addChatMessage('user', inputValue);
 
         aiProcessing.set(true);
 
         try {
-            // Build enhanced context with chat history
             const context = buildAIContext();
-
-            console.log('Sending enhanced context to AI:', context);
-
-            // Send to AI for processing
             const result = await FSaiAPI.processWithAI(inputValue, context);
 
             if (result.success && result.data) {
-                console.log('AI Response:', result.data.response);
-
-                // Add AI response to chat
                 addChatMessage('ai', result.data.response);
 
-                // If there are tool calls, show confirmation
                 if (result.data.toolCalls && result.data.toolCalls.length > 0) {
                     pendingToolCalls.set(result.data.toolCalls);
-                    originalPrompt.set(inputValue); // Store the original prompt for follow-up
-                    executedToolResults.set([]); // Clear previous results
+                    originalPrompt.set(inputValue);
+                    executedToolResults.set([]);
                     initialToolCallCount = 0; // Reset count
                     addChatMessage(
                         'system',
@@ -184,11 +163,9 @@
                     );
                 }
             } else {
-                console.error('AI processing failed:', result.error);
                 addChatMessage('system', `Error: ${result.error || 'AI processing failed'}`);
             }
         } catch (error) {
-            console.error('Error processing AI request:', error);
             addChatMessage('system', `Error: ${error}`);
         } finally {
             aiProcessing.set(false);
@@ -196,11 +173,9 @@
     }
 
     async function handleToolAction(toolCall: ToolCall, action: 'accept' | 'deny') {
-        // Optimistically remove from pending list
         pendingToolCalls.update((calls) => calls.filter((c) => c.id !== toolCall.id));
 
         if (action === 'deny') {
-            console.log('Tool call denied:', toolCall.id);
             addChatMessage('system', `Permission denied for: ${toolCall.description}`);
             executedToolResults.update((results) => [
                 ...results,
@@ -209,23 +184,19 @@
             return;
         }
 
-        console.log('Tool call accepted:', toolCall.id);
         addChatMessage('system', `Permission granted for: ${toolCall.description}`);
 
         try {
-            // Execute the tool call
             const context = buildAIContext();
             const result = await FSaiAPI.executeToolCall(toolCall, context);
 
             if (result.success) {
-                console.log('Tool call executed successfully:', result.data);
                 addChatMessage('system', `✅ ${toolCall.description} completed`);
                 executedToolResults.update((results) => [
                     ...results,
                     { toolCallId: toolCall.id, status: 'success', result: result.data.result }
                 ]);
 
-                // Store file content if it was a read operation
                 if (toolCall.type === 'read_file' && result.data?.result?.content) {
                     const newFileContent: ReadFileContent = {
                         path: result.data.result.path,
@@ -273,7 +244,6 @@
             );
 
             if (followUpResult.success && followUpResult.data) {
-                console.log('Follow-up Response:', followUpResult.data.response);
                 if (followUpResult.data.response) {
                     addChatMessage('ai', followUpResult.data.response);
                 }
@@ -299,7 +269,6 @@
                 cleanupAfterFollowUp();
             }
         } catch (followUpError) {
-            console.error('Error in follow-up processing:', followUpError);
             addChatMessage('system', `Error in follow-up: ${followUpError}`);
             cleanupAfterFollowUp();
         }
@@ -313,25 +282,14 @@
         initialToolCallCount = 0;
     }
 
-    function handleFloatingBarDeny() {
-        // This function is now managed by the component per-item
-        // but we can keep it for a "Deny All" button if we add one.
-        // For now, it does nothing if called.
-        console.log('Deny All requested');
-        const calls = $pendingToolCalls;
-        calls.forEach((toolCall) => handleToolAction(toolCall, 'deny'));
-    }
 
     function handleChatClose() {
         chatVisible.set(false);
     }
 
     function handleNewChat() {
-        // Clear chat messages
         chatMessages.set([]);
-        // Clear file contents from context
         readFileContents.set([]);
-        // Add a welcome message
         addChatMessage('system', 'New chat started');
     }
 </script>

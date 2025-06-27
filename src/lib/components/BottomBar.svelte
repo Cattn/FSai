@@ -8,11 +8,10 @@
     let inputValue = '';
     let inputElement: HTMLInputElement;
     
-    // Auto-focus the input when the component becomes visible
     $: if (visible && inputElement) {
         setTimeout(() => {
             inputElement.focus();
-        }, 450); // Delay to allow transition to complete
+        }, 450);
     }
     
     function handleSubmit() {

@@ -37,7 +37,6 @@
   });
 
   function getCrossPlatformHomeFallback(): string {
-    // Detect platform based on user agent and path separators
     const isWindows = navigator.userAgent.includes('Windows') || navigator.platform.includes('Win');
     const isMac = navigator.userAgent.includes('Mac') || navigator.platform.includes('Mac');
     
@@ -46,7 +45,6 @@
     } else if (isMac) {
       return '/Users/cattn';
     } else {
-      // Linux/Unix
       return '/home/cattn';
     }
   }
@@ -61,24 +59,20 @@
       return { canPreview: false, reason: `File too large (${sizeMB}MB). Maximum size is 5MB.` };
     }
 
-    // Check cache first
     if (filePreviewCache.has(file.path)) {
       return filePreviewCache.get(file.path)!;
     }
 
-    // Check if file appears to be binary by examining first few bytes
     try {
       const result = await FSaiAPI.checkFileType(file.path);
       const response = result.success 
         ? { canPreview: result.data?.isText || false, reason: result.data?.reason }
         : { canPreview: false, reason: result.error || 'Could not determine file type' };
       
-      // Cache the result
       filePreviewCache.set(file.path, response);
       return response;
     } catch (e) {
       console.error('File type check failed for', file.path, ':', e);
-      // Fallback to simple size-based check if API fails
       const fallbackResponse = { canPreview: true, reason: 'Using fallback detection' };
       filePreviewCache.set(file.path, fallbackResponse);
       return fallbackResponse;
@@ -100,38 +94,27 @@
 
   onMount(async () => {
     try {
-      console.log('Initializing FSai API...');
       await FSaiAPI.initialize();
       
-      console.log('Checking backend health...');
       const health = await FSaiAPI.healthCheck();
-      console.log('Health check result:', health);
       
       if (health.success) {
         backendStatus = `Connected - ${health.data?.message}`;
         isConnected = true;
         
-        // Get and set the user's home directory as default path
-        console.log('Getting home directory...');
         try {
           const homeResult = await FSaiAPI.getHomeDirectory();
-          console.log('Home directory API result:', homeResult);
           if (homeResult.success && homeResult.data?.path) {
-            console.log('Current path before update:', currentPath);
             currentPath = homeResult.data.path;
-            console.log('Set currentPath to:', currentPath);
           } else {
             console.error('Failed to get home directory:', homeResult.error || 'Unknown error');
             currentPath = getCrossPlatformHomeFallback();
-            console.log('Using fallback path:', currentPath);
           }
         } catch (e) {
           console.error('Error getting home directory:', e);
           currentPath = getCrossPlatformHomeFallback();
-          console.log('Using hardcoded fallback path:', currentPath);
         }
         
-        console.log('Loading directory for path:', currentPath);
         await loadDirectory();
       } else {
         backendStatus = 'Backend connection failed';
@@ -164,7 +147,6 @@
   }
 
   function isAtRoot(path: string): boolean {
-    // Check if path is at root for either Windows or Unix
     const windowsRootPattern = /^[A-Za-z]:\\?$/;
     const unixRootPattern = /^\/$/;
     
@@ -172,33 +154,26 @@
   }
 
   function getParentPath(path: string): string {
-    // Detect if this is a Windows or Unix-style path
     const isWindowsPath = path.includes('\\') || /^[A-Za-z]:/.test(path);
     const separator = isWindowsPath ? '\\' : '/';
     
-    // Check if already at root
     if (isAtRoot(path)) {
-      return path; // Already at root
+      return path;
     }
     
-    // Normalize path separators for consistency
     const normalizedPath = path.replace(/[\/\\]/g, separator);
     
-    // Split by separator and remove empty parts
     const parts = normalizedPath.split(separator).filter(part => part !== '');
     
     if (parts.length <= 1) {
-      // Go to root
       return isWindowsPath ? 'C:\\' : '/';
     }
     
-    // Remove the last part to go up one level
     parts.pop();
     
-    // Reconstruct the path
     if (isWindowsPath) {
       if (parts.length === 1 && parts[0].endsWith(':')) {
-        return parts[0] + '\\'; // e.g., "C:\\"
+        return parts[0] + '\\';
       }
       return parts.join('\\');
     } else {
@@ -238,7 +213,6 @@
       const result = await FSaiAPI.writeFile(selectedFile.path, fileContent);
       if (result.success) {
         error = '';
-        console.log('File saved successfully');
       } else {
         error = result.error || 'Failed to save file';
       }
@@ -251,7 +225,6 @@
     const isWindowsPath = basePath.includes('\\') || /^[A-Za-z]:/.test(basePath);
     const separator = isWindowsPath ? '\\' : '/';
     
-    // Ensure base path doesn't end with separator
     const cleanBasePath = basePath.endsWith(separator) ? basePath.slice(0, -1) : basePath;
     return `${cleanBasePath}${separator}${name}`;
   }
@@ -312,7 +285,6 @@
 </script>
 
 <main class="m3-container">
-  <!-- Header -->
   <div class="header-section">
     <h1 class="m3-font-display-large">FSai</h1>
     <p class="m3-font-title-medium subtitle">Filesystem AI Assistant</p>
@@ -326,7 +298,6 @@
     </div>
   </div>
   
-  <!-- Status Bar -->
   <Card variant="elevated" style="margin-bottom: 1.5rem;">
     <div class="status-content">
       <div class="status-indicator {isConnected ? 'connected' : 'disconnected'}"></div>
@@ -346,11 +317,8 @@
     </Card>
   {/if}
 
-  <!-- Main Content Grid -->
   <div class="content-grid">
-    <!-- File Explorer Panel -->
     <div class="explorer-panel">
-      <!-- Path Bar -->
       <Card variant="filled" style="margin-bottom: 1rem;">
         <div class="path-section">
           <!-- svelte-ignore a11y_label_has_associated_control -->
@@ -376,7 +344,6 @@
         </div>
       </Card>
 
-      <!-- Actions Panel -->
       <Card variant="filled" style="margin-bottom: 1rem;">
         <div class="actions-section">
           <h3 class="m3-font-title-medium">Quick Actions</h3>
@@ -440,7 +407,6 @@
         </div>
       </Card>
 
-      <!-- File List -->
       <Card variant="elevated">
         <div class="file-list-header">
           <h3 class="m3-font-title-medium">
@@ -505,7 +471,6 @@
       </Card>
     </div>
 
-    <!-- File Editor Panel -->
     {#if selectedFile && selectedFile.isFile}
       <Card variant="elevated" style="height: fit-content;">
         <div class="file-editor-header">

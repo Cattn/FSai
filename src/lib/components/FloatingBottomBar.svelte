@@ -104,7 +104,6 @@
 {/if}
 
 <style>
-	/* Custom scrollbar */
 	div::-webkit-scrollbar {
 		width: 4px;
 	}

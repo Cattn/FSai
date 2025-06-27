@@ -80,11 +80,9 @@ class FSaiAPI {
     }
 
     this.readyPromise = new Promise((resolve) => {
-      // Listen for backend ready event
       listen('backend-ready', (event) => {
         this.backendPort = event.payload as number;
         this.backendReady = true;
-        console.log(`FSai backend ready on port ${this.backendPort}`);
         resolve();
       });
 
@@ -101,11 +99,9 @@ class FSaiAPI {
         if (port) {
           this.backendPort = port;
           this.backendReady = true;
-          console.log(`FSai backend found on port ${this.backendPort}`);
           break;
         }
       } catch (e) {
-        console.log('Waiting for backend...', e);
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -191,7 +187,6 @@ class FSaiAPI {
     try {
       return await this.makeApiRequest('/fs/check-type', { method: 'POST', body: { path } });
     } catch (error) {
-      console.error('checkFileType API call failed:', error);
       return {
         success: false,
         error: `API call failed: ${error}`

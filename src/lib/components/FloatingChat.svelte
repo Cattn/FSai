@@ -22,7 +22,6 @@
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
     
-    // Auto-scroll to bottom when new messages arrive (only if user is already at bottom)
     let chatContainer: HTMLElement;
     let previousMessageCount = 0;
     let shouldAutoScroll = true;
@@ -32,19 +31,16 @@
 		(tc) => tc.type === 'write_file' && tc.parameters.path && tc.parameters.content
 	);
     
-    // Check if user is near the bottom of the chat
     function isNearBottom(): boolean {
         if (!chatContainer) return true;
         const threshold = 50; // pixels from bottom
         return chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight <= threshold;
     }
     
-    // Handle scroll events to determine if we should auto-scroll
     function handleScroll() {
         shouldAutoScroll = isNearBottom();
     }
     
-    // Auto-scroll only when new messages arrive and user was at bottom
     $: if (chatContainer && (messages.length > previousMessageCount || writeFilePreviews.length > 0)) {
         if (shouldAutoScroll) {
             setTimeout(() => {
@@ -63,7 +59,6 @@
             class="backdrop-blur-[16px] rounded-lg min-h-[120px] max-h-[70vh] flex flex-col"
             style="background: rgb(var(--m3-scheme-surface-container-high)); border: 1px solid rgb(var(--m3-scheme-outline-variant)); border-radius: var(--m3-util-rounding-extra-large); box-shadow: var(--m3-util-elevation-4);"
         >
-            <!-- Header -->
             <div 
                 class="flex items-center justify-between p-4 border-b border-opacity-20 flex-shrink-0"
                 style="border-color: rgb(var(--m3-scheme-outline-variant));"
@@ -104,7 +99,6 @@
                 </div>
             </div>
             
-            <!-- Messages -->
             <div 
                 bind:this={chatContainer}
                 class="overflow-y-auto p-4 space-y-3 flex-1 min-h-0"
@@ -210,7 +204,6 @@
         transition: all 0.2s ease-in-out;
     }
     
-    /* Custom scrollbar */
     div::-webkit-scrollbar {
         width: 4px;
     }
@@ -228,7 +221,6 @@
         background: rgb(var(--m3-scheme-outline));
     }
 
-    /* Markdown styling - using default marked HTML elements */
     :global(.message h1, .message h2, .message h3, .message h4, .message h5, .message h6) {
         font-weight: 600;
         margin: 0.5rem 0 0.25rem 0;
@@ -256,7 +248,6 @@
         font-style: italic;
     }
 
-    /* Default marked inline code styling */
     :global(.message code) {
         background: rgb(var(--m3-scheme-surface-container-highest));
         color: rgb(var(--m3-scheme-on-surface));
@@ -267,7 +258,6 @@
         border: 1px solid rgb(var(--m3-scheme-outline-variant));
     }
 
-    /* Default marked code block styling */
     :global(.message pre) {
         background: rgb(var(--m3-scheme-surface-container-highest));
         border: 1px solid rgb(var(--m3-scheme-outline-variant));
@@ -287,7 +277,6 @@
         line-height: 1.4;
     }
 
-    /* Default marked blockquote styling */
     :global(.message blockquote) {
         border-left: 3px solid rgb(var(--m3-scheme-primary));
         background: rgb(var(--m3-scheme-surface-container-low));
@@ -297,7 +286,6 @@
         font-style: italic;
     }
 
-    /* Default marked list styling */
     :global(.message ul, .message ol) {
         margin: 0.5rem 0;
         padding-left: 1.25rem;
@@ -333,7 +321,6 @@
         margin: 0.75rem 0;
     }
 
-    /* Ensure proper spacing in markdown content */
     :global(.message > div > *:first-child) {
         margin-top: 0;
     }

@@ -41,7 +41,6 @@ export interface ReadFileContent {
 
 export const readFileContents = writable<ReadFileContent[]>([]);
 
-// Store for executed tool call results
 export interface ToolResult {
   toolCallId: string;
   status: 'success' | 'error' | 'denied';
