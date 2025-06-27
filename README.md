@@ -35,9 +35,19 @@ Download a binary for your respective platform from the [Releases](https://githu
 
 
 ## Notes:
+
+### Gemeni API Usage
 You need to provide your own Gemeni API key in settings. The free tier is acceptable for 90% of usage. 
 
+### Issues
 This app should run perfectly fine on all platforms. If you encounter any issues, please create an [issue here](https://github.com/Cattn/FSai/issues/new)
+
+### Configuration
+
+There are 3 configuration options available in settings. 
+- Gemeni API Key
+- Allow root access
+- Allow multi-media support
 
 ## Development 
 
