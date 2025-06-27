@@ -1,0 +1,951 @@
+File System
+GitHub
+npm
+crates.io
+API Reference
+Access the file system.
+
+Use std::fs or tokio::fs on the Rust side
+
+If you want to manipulate files/directories through Rust, use traditional Rust’s libs (std::fs, tokio::fs, etc).
+
+Supported Platforms
+This plugin requires a Rust version of at least 1.77.2
+
+Platform	Level	Notes
+windows	
+Apps installed via MSI or NSIS in perMachine and both mode require admin permissions for write access in $RESOURCES folder
+
+linux	
+No write access to $RESOURCES folder
+
+macos	
+No write access to $RESOURCES folder
+
+android	
+Access is restricted to Application folder by default
+
+ios	
+Access is restricted to Application folder by default
+
+Setup
+Install the fs plugin to get started.
+
+Automatic
+Manual
+Use your project’s package manager to add the dependency:
+
+npm
+yarn
+pnpm
+deno
+bun
+cargo
+npm run tauri add fs
+
+Configuration
+Android
+When using the audio, cache, documents, downloads, picture, public or video directories your app must have access to the external storage.
+
+Include the following permissions to the manifest tag in the gen/android/app/src/main/AndroidManifest.xml file:
+
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+iOS
+Apple requires app developers to specify approved reasons for API usage to enhance user privacy.
+
+You must create a PrivacyInfo.xcprivacy file in the src-tauri/gen/apple folder with the required NSPrivacyAccessedAPICategoryFileTimestamp key and the C617.1 recommended reason.
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+      <dict>
+        <key>NSPrivacyAccessedAPIType</key>
+        <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key>
+        <array>
+          <string>C617.1</string>
+        </array>
+      </dict>
+    </array>
+  </dict>
+</plist>
+
+Usage
+The fs plugin is available in both JavaScript and Rust.
+
+Different APIs
+
+Although this plugin has a file manipulation API on the frontend, in the backend it offers only the methods to change permission of some resources (files, directories, etc).
+
+In the Rust side you can use the traditional file manipulation libraries, std::fs, tokio::fs or others.
+
+JavaScript
+Rust
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+// when using `"withGlobalTauri": true`, you may use
+// const { exists, BaseDirectory } = window.__TAURI__.fs;
+
+// Check if the `$APPDATA/avatar.png` file exists
+await exists('avatar.png', { baseDir: BaseDirectory.AppData });
+
+Security
+This module prevents path traversal, not allowing parent directory accessors to be used (i.e. “/usr/path/to/../file” or ”../path/to/file” paths are not allowed). Paths accessed with this API must be either relative to one of the base directories or created with the path API.
+
+See @tauri-apps/plugin-fs - Security for more information.
+
+Paths
+The file system plugin offers two ways of manipulating paths: the base directory and the path API.
+
+base directory
+
+Every API has an options argument that lets you define a baseDir that acts as the working directory of the operation.
+
+import { readFile } from '@tauri-apps/plugin-fs';
+const contents = await readFile('avatars/tauri.png', {
+  baseDir: BaseDirectory.Home,
+});
+
+In the above example the ~/avatars/tauri.png file is read since we are using the Home base directory.
+
+path API
+
+Alternatively you can use the path APIs to perform path manipulations.
+
+import { readFile } from '@tauri-apps/plugin-fs';
+import * as path from '@tauri-apps/api/path';
+const home = await path.homeDir();
+const contents = await readFile(await path.join(home, 'avatars/tauri.png'));
+
+Files
+Create
+Creates a file and returns a handle to it. If the file already exists, it is truncated.
+
+import { create, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await create('foo/bar.txt', { baseDir: BaseDirectory.AppData });
+await file.write(new TextEncoder().encode('Hello world'));
+await file.close();
+
+Note
+
+Always call file.close() when you are done manipulating the file.
+
+Write
+The plugin offers separate APIs for writing text and binary files for performance.
+
+text files
+
+import { writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const contents = JSON.stringify({ notifications: true });
+await writeTextFile('config.json', contents, {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+binary files
+
+import { writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const contents = new Uint8Array(); // fill a byte array
+await writeFile('config', contents, {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+Open
+Opens a file and returns a handle to it. With this API you have more control over how the file should be opened (read-only mode, write-only mode, append instead of overwrite, only create if it does not exist, etc).
+
+Note
+
+Always call file.close() when you are done manipulating the file.
+
+read-only
+
+This is the default mode.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  read: true,
+  baseDir: BaseDirectory.AppData,
+});
+
+const stat = await file.stat();
+const buf = new Uint8Array(stat.size);
+await file.read(buf);
+const textContents = new TextDecoder().decode(buf);
+await file.close();
+
+write-only
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('Hello world'));
+await file.close();
+
+By default the file is truncated on any file.write() call. See the following example to learn how to append to the existing contents instead.
+
+append
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  append: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+Note that { append: true } has the same effect as { write: true, append: true }.
+
+truncate
+
+When the truncate option is set and the file already exists, it will be truncated to length 0.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  truncate: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+This option requires write to be true.
+
+You can use it along the append option if you want to rewrite an existing file using multiple file.write() calls.
+
+create
+
+By default the open API only opens existing files. To create the file if it does not exist, opening it if it does, set create to true:
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  create: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+In order for the file to be created, write or append must also be set to true.
+
+To fail if the file already exists, see createNew.
+
+createNew
+
+createNew works similarly to create, but will fail if the file already exists.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  createNew: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+In order for the file to be created, write must also be set to true.
+
+Read
+The plugin offers separate APIs for reading text and binary files for performance.
+
+text files
+
+import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const configToml = await readTextFile('config.toml', {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+If the file is large you can stream its lines with the readTextFileLines API:
+
+import { readTextFileLines, BaseDirectory } from '@tauri-apps/plugin-fs';
+const lines = await readTextFileLines('app.logs', {
+  baseDir: BaseDirectory.AppLog,
+});
+for await (const line of lines) {
+  console.log(line);
+}
+
+binary files
+
+import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const icon = await readFile('icon.png', {
+  baseDir: BaseDirectory.Resources,
+});
+
+Remove
+Call remove() to delete a file. If the file does not exist, an error is returned.
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('user.db', { baseDir: BaseDirectory.AppLocalData });
+
+Copy
+The copyFile function takes the source and destination paths. Note that you must configure each base directory separately.
+
+import { copyFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+await copyFile('user.db', 'user.db.bk', {
+  fromPathBaseDir: BaseDirectory.AppLocalData,
+  toPathBaseDir: BaseDirectory.Temp,
+});
+
+In the above example the <app-local-data>/user.db file is copied to $TMPDIR/user.db.bk.
+
+Exists
+Use the exists() function to check if a file exists:
+
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+const tokenExists = await exists('token', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Metadata
+File metadata can be retrieved with the stat and the lstat functions. stat follows symlinks (and returns an error if the actual file it points to is not allowed by the scope) and lstat does not follow symlinks, returning the information of the symlink itself.
+
+import { stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+const metadata = await stat('app.db', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Rename
+The rename function takes the source and destination paths. Note that you must configure each base directory separately.
+
+import { rename, BaseDirectory } from '@tauri-apps/plugin-fs';
+await rename('user.db.bk', 'user.db', {
+  fromPathBaseDir: BaseDirectory.AppLocalData,
+  toPathBaseDir: BaseDirectory.Temp,
+});
+
+In the above example the <app-local-data>/user.db.bk file is renamed to $TMPDIR/user.db.
+
+Truncate
+Truncates or extends the specified file to reach the specified file length (defaults to 0).
+
+truncate to 0 length
+import { truncate } from '@tauri-apps/plugin-fs';
+await truncate('my_file.txt', 0, { baseDir: BaseDirectory.AppLocalData });
+
+truncate to a specific length
+import {
+  truncate,
+  readTextFile,
+  writeTextFile,
+  BaseDirectory,
+} from '@tauri-apps/plugin-fs';
+
+const filePath = 'file.txt';
+await writeTextFile(filePath, 'Hello World', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+await truncate(filePath, 7, {
+  baseDir: BaseDirectory.AppLocalData,
+});
+const data = await readTextFile(filePath, {
+  baseDir: BaseDirectory.AppLocalData,
+});
+console.log(data); // "Hello W"
+
+Directories
+Create
+To create a directory, call the mkdir function:
+
+import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
+await mkdir('images', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Read
+The readDir function recursively lists the entries of a directory:
+
+import { readDir, BaseDirectory } from '@tauri-apps/plugin-fs';
+const entries = await readDir('users', { baseDir: BaseDirectory.AppLocalData });
+
+Remove
+Call remove() to delete a directory. If the directory does not exist, an error is returned.
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('images', { baseDir: BaseDirectory.AppLocalData });
+
+If the directory is not empty, the recursive option must be set to true:
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('images', {
+  baseDir: BaseDirectory.AppLocalData,
+  recursive: true,
+});
+
+Exists
+Use the exists() function to check if a directory exists:
+
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+const tokenExists = await exists('images', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Metadata
+Directory metadata can be retrieved with the stat and the lstat functions. stat follows symlinks (and returns an error if the actual file it points to is not allowed by the scope) and lstat does not follow symlinks, returning the information of the symlink itself.
+
+import { stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+const metadata = await stat('databases', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Watching changes
+To watch a directory or file for changes, use the watch or watchImmediate functions.
+
+watch
+
+watch is debounced so it only emits events after a certain delay:
+
+import { watch, BaseDirectory } from '@tauri-apps/plugin-fs';
+await watch(
+  'app.log',
+  (event) => {
+    console.log('app.log event', event);
+  },
+  {
+    baseDir: BaseDirectory.AppLog,
+    delayMs: 500,
+  }
+);
+
+watchImmediate
+
+watchImmediate immediately notifies listeners of an event:
+
+import { watchImmediate, BaseDirectory } from '@tauri-apps/plugin-fs';
+await watchImmediate(
+  'logs',
+  (event) => {
+    console.log('logs directory event', event);
+  },
+  {
+    baseDir: BaseDirectory.AppLog,
+    recursive: true,
+  }
+);
+
+By default watch operations on a directory are not recursive. Set the recursive option to true to recursively watch for changes on all sub-directories.
+
+Note
+
+The watch functions require the watch feature flag:
+
+src-tauri/Cargo.toml
+[dependencies]
+tauri-plugin-fs = { version = "2.0.0", features = ["watch"] }
+
+Permissions
+By default all potentially dangerous plugin commands and scopes are blocked and cannot be accessed. You must modify the permissions in your capabilities configuration to enable these.
+
+See the Capabilities Overview for more information and the step by step guide to use plugin permissions.
+
+src-tauri/capabilities/default.json
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "fs:default",
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$APPDATA/*" }]
+    }
+  ]
+}
+
+Default Permission
+This set of permissions describes the what kind of file system access the fs plugin has enabled or denied by default.
+
+Granted Permissions
+This default permission set enables read access to the application specific directories (AppConfig, AppData, AppLocalData, AppCache, AppLog) and all files and sub directories created in it. The location of these directories depends on the operating system, where the application is run.
+
+In general these directories need to be manually created by the application at runtime, before accessing files or folders in it is possible.
+
+Therefore, it is also allowed to create all of these folders via the mkdir command.
+
+Denied Permissions
+This default permission set prevents access to critical components of the Tauri application by default. On Windows the webview data folder access is denied.
+
+This default permission set includes the following:
+create-app-specific-dirs
+read-app-specific-dirs-recursive
+deny-defaultFile System
+GitHub
+npm
+crates.io
+API Reference
+Access the file system.
+
+Use std::fs or tokio::fs on the Rust side
+
+If you want to manipulate files/directories through Rust, use traditional Rust’s libs (std::fs, tokio::fs, etc).
+
+Supported Platforms
+This plugin requires a Rust version of at least 1.77.2
+
+Platform	Level	Notes
+windows	
+Apps installed via MSI or NSIS in perMachine and both mode require admin permissions for write access in $RESOURCES folder
+
+linux	
+No write access to $RESOURCES folder
+
+macos	
+No write access to $RESOURCES folder
+
+android	
+Access is restricted to Application folder by default
+
+ios	
+Access is restricted to Application folder by default
+
+Setup
+Install the fs plugin to get started.
+
+Automatic
+Manual
+Use your project’s package manager to add the dependency:
+
+npm
+yarn
+pnpm
+deno
+bun
+cargo
+npm run tauri add fs
+
+Configuration
+Android
+When using the audio, cache, documents, downloads, picture, public or video directories your app must have access to the external storage.
+
+Include the following permissions to the manifest tag in the gen/android/app/src/main/AndroidManifest.xml file:
+
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+iOS
+Apple requires app developers to specify approved reasons for API usage to enhance user privacy.
+
+You must create a PrivacyInfo.xcprivacy file in the src-tauri/gen/apple folder with the required NSPrivacyAccessedAPICategoryFileTimestamp key and the C617.1 recommended reason.
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+      <dict>
+        <key>NSPrivacyAccessedAPIType</key>
+        <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key>
+        <array>
+          <string>C617.1</string>
+        </array>
+      </dict>
+    </array>
+  </dict>
+</plist>
+
+Usage
+The fs plugin is available in both JavaScript and Rust.
+
+Different APIs
+
+Although this plugin has a file manipulation API on the frontend, in the backend it offers only the methods to change permission of some resources (files, directories, etc).
+
+In the Rust side you can use the traditional file manipulation libraries, std::fs, tokio::fs or others.
+
+JavaScript
+Rust
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+// when using `"withGlobalTauri": true`, you may use
+// const { exists, BaseDirectory } = window.__TAURI__.fs;
+
+// Check if the `$APPDATA/avatar.png` file exists
+await exists('avatar.png', { baseDir: BaseDirectory.AppData });
+
+Security
+This module prevents path traversal, not allowing parent directory accessors to be used (i.e. “/usr/path/to/../file” or ”../path/to/file” paths are not allowed). Paths accessed with this API must be either relative to one of the base directories or created with the path API.
+
+See @tauri-apps/plugin-fs - Security for more information.
+
+Paths
+The file system plugin offers two ways of manipulating paths: the base directory and the path API.
+
+base directory
+
+Every API has an options argument that lets you define a baseDir that acts as the working directory of the operation.
+
+import { readFile } from '@tauri-apps/plugin-fs';
+const contents = await readFile('avatars/tauri.png', {
+  baseDir: BaseDirectory.Home,
+});
+
+In the above example the ~/avatars/tauri.png file is read since we are using the Home base directory.
+
+path API
+
+Alternatively you can use the path APIs to perform path manipulations.
+
+import { readFile } from '@tauri-apps/plugin-fs';
+import * as path from '@tauri-apps/api/path';
+const home = await path.homeDir();
+const contents = await readFile(await path.join(home, 'avatars/tauri.png'));
+
+Files
+Create
+Creates a file and returns a handle to it. If the file already exists, it is truncated.
+
+import { create, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await create('foo/bar.txt', { baseDir: BaseDirectory.AppData });
+await file.write(new TextEncoder().encode('Hello world'));
+await file.close();
+
+Note
+
+Always call file.close() when you are done manipulating the file.
+
+Write
+The plugin offers separate APIs for writing text and binary files for performance.
+
+text files
+
+import { writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const contents = JSON.stringify({ notifications: true });
+await writeTextFile('config.json', contents, {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+binary files
+
+import { writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const contents = new Uint8Array(); // fill a byte array
+await writeFile('config', contents, {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+Open
+Opens a file and returns a handle to it. With this API you have more control over how the file should be opened (read-only mode, write-only mode, append instead of overwrite, only create if it does not exist, etc).
+
+Note
+
+Always call file.close() when you are done manipulating the file.
+
+read-only
+
+This is the default mode.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  read: true,
+  baseDir: BaseDirectory.AppData,
+});
+
+const stat = await file.stat();
+const buf = new Uint8Array(stat.size);
+await file.read(buf);
+const textContents = new TextDecoder().decode(buf);
+await file.close();
+
+write-only
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('Hello world'));
+await file.close();
+
+By default the file is truncated on any file.write() call. See the following example to learn how to append to the existing contents instead.
+
+append
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  append: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+Note that { append: true } has the same effect as { write: true, append: true }.
+
+truncate
+
+When the truncate option is set and the file already exists, it will be truncated to length 0.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  truncate: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+This option requires write to be true.
+
+You can use it along the append option if you want to rewrite an existing file using multiple file.write() calls.
+
+create
+
+By default the open API only opens existing files. To create the file if it does not exist, opening it if it does, set create to true:
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  create: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+In order for the file to be created, write or append must also be set to true.
+
+To fail if the file already exists, see createNew.
+
+createNew
+
+createNew works similarly to create, but will fail if the file already exists.
+
+import { open, BaseDirectory } from '@tauri-apps/plugin-fs';
+const file = await open('foo/bar.txt', {
+  write: true,
+  createNew: true,
+  baseDir: BaseDirectory.AppData,
+});
+await file.write(new TextEncoder().encode('world'));
+await file.close();
+
+In order for the file to be created, write must also be set to true.
+
+Read
+The plugin offers separate APIs for reading text and binary files for performance.
+
+text files
+
+import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const configToml = await readTextFile('config.toml', {
+  baseDir: BaseDirectory.AppConfig,
+});
+
+If the file is large you can stream its lines with the readTextFileLines API:
+
+import { readTextFileLines, BaseDirectory } from '@tauri-apps/plugin-fs';
+const lines = await readTextFileLines('app.logs', {
+  baseDir: BaseDirectory.AppLog,
+});
+for await (const line of lines) {
+  console.log(line);
+}
+
+binary files
+
+import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+const icon = await readFile('icon.png', {
+  baseDir: BaseDirectory.Resources,
+});
+
+Remove
+Call remove() to delete a file. If the file does not exist, an error is returned.
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('user.db', { baseDir: BaseDirectory.AppLocalData });
+
+Copy
+The copyFile function takes the source and destination paths. Note that you must configure each base directory separately.
+
+import { copyFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+await copyFile('user.db', 'user.db.bk', {
+  fromPathBaseDir: BaseDirectory.AppLocalData,
+  toPathBaseDir: BaseDirectory.Temp,
+});
+
+In the above example the <app-local-data>/user.db file is copied to $TMPDIR/user.db.bk.
+
+Exists
+Use the exists() function to check if a file exists:
+
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+const tokenExists = await exists('token', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Metadata
+File metadata can be retrieved with the stat and the lstat functions. stat follows symlinks (and returns an error if the actual file it points to is not allowed by the scope) and lstat does not follow symlinks, returning the information of the symlink itself.
+
+import { stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+const metadata = await stat('app.db', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Rename
+The rename function takes the source and destination paths. Note that you must configure each base directory separately.
+
+import { rename, BaseDirectory } from '@tauri-apps/plugin-fs';
+await rename('user.db.bk', 'user.db', {
+  fromPathBaseDir: BaseDirectory.AppLocalData,
+  toPathBaseDir: BaseDirectory.Temp,
+});
+
+In the above example the <app-local-data>/user.db.bk file is renamed to $TMPDIR/user.db.
+
+Truncate
+Truncates or extends the specified file to reach the specified file length (defaults to 0).
+
+truncate to 0 length
+import { truncate } from '@tauri-apps/plugin-fs';
+await truncate('my_file.txt', 0, { baseDir: BaseDirectory.AppLocalData });
+
+truncate to a specific length
+import {
+  truncate,
+  readTextFile,
+  writeTextFile,
+  BaseDirectory,
+} from '@tauri-apps/plugin-fs';
+
+const filePath = 'file.txt';
+await writeTextFile(filePath, 'Hello World', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+await truncate(filePath, 7, {
+  baseDir: BaseDirectory.AppLocalData,
+});
+const data = await readTextFile(filePath, {
+  baseDir: BaseDirectory.AppLocalData,
+});
+console.log(data); // "Hello W"
+
+Directories
+Create
+To create a directory, call the mkdir function:
+
+import { mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
+await mkdir('images', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Read
+The readDir function recursively lists the entries of a directory:
+
+import { readDir, BaseDirectory } from '@tauri-apps/plugin-fs';
+const entries = await readDir('users', { baseDir: BaseDirectory.AppLocalData });
+
+Remove
+Call remove() to delete a directory. If the directory does not exist, an error is returned.
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('images', { baseDir: BaseDirectory.AppLocalData });
+
+If the directory is not empty, the recursive option must be set to true:
+
+import { remove, BaseDirectory } from '@tauri-apps/plugin-fs';
+await remove('images', {
+  baseDir: BaseDirectory.AppLocalData,
+  recursive: true,
+});
+
+Exists
+Use the exists() function to check if a directory exists:
+
+import { exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+const tokenExists = await exists('images', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Metadata
+Directory metadata can be retrieved with the stat and the lstat functions. stat follows symlinks (and returns an error if the actual file it points to is not allowed by the scope) and lstat does not follow symlinks, returning the information of the symlink itself.
+
+import { stat, BaseDirectory } from '@tauri-apps/plugin-fs';
+const metadata = await stat('databases', {
+  baseDir: BaseDirectory.AppLocalData,
+});
+
+Watching changes
+To watch a directory or file for changes, use the watch or watchImmediate functions.
+
+watch
+
+watch is debounced so it only emits events after a certain delay:
+
+import { watch, BaseDirectory } from '@tauri-apps/plugin-fs';
+await watch(
+  'app.log',
+  (event) => {
+    console.log('app.log event', event);
+  },
+  {
+    baseDir: BaseDirectory.AppLog,
+    delayMs: 500,
+  }
+);
+
+watchImmediate
+
+watchImmediate immediately notifies listeners of an event:
+
+import { watchImmediate, BaseDirectory } from '@tauri-apps/plugin-fs';
+await watchImmediate(
+  'logs',
+  (event) => {
+    console.log('logs directory event', event);
+  },
+  {
+    baseDir: BaseDirectory.AppLog,
+    recursive: true,
+  }
+);
+
+By default watch operations on a directory are not recursive. Set the recursive option to true to recursively watch for changes on all sub-directories.
+
+Note
+
+The watch functions require the watch feature flag:
+
+src-tauri/Cargo.toml
+[dependencies]
+tauri-plugin-fs = { version = "2.0.0", features = ["watch"] }
+
+Permissions
+By default all potentially dangerous plugin commands and scopes are blocked and cannot be accessed. You must modify the permissions in your capabilities configuration to enable these.
+
+See the Capabilities Overview for more information and the step by step guide to use plugin permissions.
+
+src-tauri/capabilities/default.json
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "fs:default",
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$APPDATA/*" }]
+    }
+  ]
+}
+
+Default Permission
+This set of permissions describes the what kind of file system access the fs plugin has enabled or denied by default.
+
+Granted Permissions
+This default permission set enables read access to the application specific directories (AppConfig, AppData, AppLocalData, AppCache, AppLog) and all files and sub directories created in it. The location of these directories depends on the operating system, where the application is run.
+
+In general these directories need to be manually created by the application at runtime, before accessing files or folders in it is possible.
+
+Therefore, it is also allowed to create all of these folders via the mkdir command.
+
+Denied Permissions
+This default permission set prevents access to critical components of the Tauri application by default. On Windows the webview data folder access is denied.
+
+This default permission set includes the following:
+create-app-specific-dirs
+read-app-specific-dirs-recursive
+deny-default

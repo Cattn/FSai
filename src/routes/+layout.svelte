@@ -229,18 +229,33 @@
 
             if (followUpResult.success && followUpResult.data) {
                 console.log('Follow-up Response:', followUpResult.data.response);
-                addChatMessage('ai', followUpResult.data.response);
+                if (followUpResult.data.response) {
+                    addChatMessage('ai', followUpResult.data.response);
+                }
+
+                if (followUpResult.data.toolCalls && followUpResult.data.toolCalls.length > 0) {
+                    pendingToolCalls.set(followUpResult.data.toolCalls);
+                    executedToolResults.set([]);
+                    initialToolCallCount = 0;
+                    addChatMessage(
+                        'system',
+                        `Requesting permission for ${followUpResult.data.toolCalls.length} more action(s).`
+                    );
+                    aiProcessing.set(false);
+                } else {
+                    cleanupAfterFollowUp();
+                }
             } else {
                 console.error('Follow-up processing failed:', followUpResult.error);
                 addChatMessage(
                     'system',
                     `Follow-up failed: ${followUpResult.error || 'Could not get response'}`
                 );
+                cleanupAfterFollowUp();
             }
         } catch (followUpError) {
             console.error('Error in follow-up processing:', followUpError);
             addChatMessage('system', `Error in follow-up: ${followUpError}`);
-        } finally {
             cleanupAfterFollowUp();
         }
     }

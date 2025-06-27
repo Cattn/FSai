@@ -34,13 +34,15 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item';
   parameters: {
     path?: string;
     from?: string;
     to?: string;
     name?: string;
     content?: string;
+    sourcePath?: string;
+    destinationPath?: string;
   };
   description: string;
   risk: 'low' | 'high';

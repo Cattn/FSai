@@ -67,6 +67,7 @@
 							{/if}
 						</div>
 						<div class="flex items-center gap-2 flex-shrink-0">
+							<!-- svelte-ignore a11y_consider_explicit_label -->
 							<button
 								on:click={() => handleDeny(toolCall)}
 								class="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
@@ -80,6 +81,7 @@
 									/>
 								</svg>
 							</button>
+							<!-- svelte-ignore a11y_consider_explicit_label -->
 							<button
 								on:click={() => handleAccept(toolCall)}
 								class="flex items-center justify-center w-8 h-8 rounded-full transition-colors"

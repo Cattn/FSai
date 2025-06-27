@@ -80,13 +80,15 @@ interface AIContext {
 
 interface ToolCall {
   id: string;
-  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory';
+  type: 'read_file' | 'delete_file' | 'move_file' | 'rename_file' | 'create_directory' | 'copy_file' | 'read_directory' | 'get_tree' | 'move_item';
   parameters: {
     path?: string;
     from?: string;
     to?: string;
     name?: string;
     content?: string;
+    sourcePath?: string;
+    destinationPath?: string;
   };
   description: string;
   risk: 'low' | 'high';
@@ -125,6 +127,25 @@ const readFileFunction = {
   }
 };
 
+const createDirectoryFunction = {
+  name: 'create_directory',
+  description: 'Creates a new directory inside a specified path.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The path of the parent directory where the new directory will be created.'
+      },
+      name: {
+        type: SchemaType.STRING,
+        description: 'The name of the new directory to create.'
+      }
+    },
+    required: ['path', 'name']
+  }
+};
+
 const readDirectoryFunction = {
   name: 'read_directory',
   description: 'Lists the files and folders in a specified directory. Use this to explore the file system.',
@@ -140,6 +161,40 @@ const readDirectoryFunction = {
   }
 };
 
+const getTreeFunction = {
+  name: 'get_tree',
+  description: 'Gets the directory tree structure for a given path, showing nested files and folders. Use this to visualize the layout of a directory.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      path: {
+        type: SchemaType.STRING,
+        description: 'The full path of the directory to get the tree for.'
+      }
+    },
+    required: ['path']
+  }
+};
+
+const moveItemFunction = {
+  name: 'move_item',
+  description: 'Moves a file or directory from a source path to a destination path.',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      sourcePath: {
+        type: SchemaType.STRING,
+        description: 'The source path of the file or directory to move.'
+      },
+      destinationPath: {
+        type: SchemaType.STRING,
+        description: 'The destination path where the item should be moved. If this is a directory, the source item will be moved inside it.'
+      }
+    },
+    required: ['sourcePath', 'destinationPath']
+  }
+};
+
 function generateToolCallId(): string {
   return 'tc_' + Math.random().toString(36).substring(2, 11);
 }
@@ -148,9 +203,11 @@ function determineRisk(toolType: string, parameters: any): 'low' | 'high' {
   switch (toolType) {
     case 'read_file':
     case 'read_directory':
+    case 'get_tree':
       return 'low';
     case 'delete_file':
     case 'move_file':
+    case 'move_item':
       return 'high';
     case 'rename_file':
     case 'create_directory':
@@ -223,7 +280,7 @@ Keep responses brief and focused unless detailed explanation is requested.`;
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
       tools: [{
-        functionDeclarations: [readFileFunction, readDirectoryFunction]
+        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction]
       }]
     });
 
@@ -241,6 +298,15 @@ Keep responses brief and focused unless detailed explanation is requested.`;
             break;
           case 'read_directory':
             description = `List contents of: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'get_tree':
+            description = `Get tree for: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'move_item':
+            description = `Move item from ${ (functionCall.args as any)?.sourcePath } to ${ (functionCall.args as any)?.destinationPath }`;
+            break;
+          case 'create_directory':
+            description = `Create directory '${(functionCall.args as any)?.name}' in '${(functionCall.args as any)?.path}'`;
             break;
           default:
             description = `Execute ${functionCall.name}`;
@@ -265,6 +331,33 @@ Keep responses brief and focused unless detailed explanation is requested.`;
     console.error('AI processing error:', error);
     throw error;
   }
+}
+
+async function generateTree(dirPath: string, prefix = ''): Promise<string> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    // Sort entries to be deterministic and user-friendly
+    entries.sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    let treeString = '';
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const isLast = i === entries.length - 1;
+        const connector = isLast ? '└── ' : '├── ';
+        treeString += `${prefix}${connector}${entry.name}\n`;
+        if (entry.isDirectory()) {
+            const newPrefix = prefix + (isLast ? '    ' : '│   ');
+            try {
+                treeString += await generateTree(path.join(dirPath, entry.name), newPrefix);
+            } catch (error) {
+                treeString += `${newPrefix}└── [error reading directory]\n`;
+            }
+        }
+    }
+    return treeString;
 }
 
 async function processFollowUpWithAI(originalPrompt: string, context: AIContext, toolResults: any): Promise<AIResponse> {
@@ -298,6 +391,11 @@ async function processFollowUpWithAI(originalPrompt: string, context: AIContext,
             const path = toolResult.result.path || 'unknown directory';
             const fileList = (toolResult.result.files as FileItem[]).map(f => `${f.isDirectory ? '📁' : '📄'} ${f.name}`).join('\n');
             toolResultsText += `Directory listing for ${path}:\n${fileList}\n\n`;
+        } else if (toolResult.result?.tree) { // get_tree
+            const path = toolResult.result.path || 'unknown directory';
+            toolResultsText += `Directory tree for ${path}:\n${toolResult.result.tree}\n\n`;
+        } else if (toolResult.result?.message) { // move_item and others
+             toolResultsText += `Tool call for '${toolResult.toolCallId}' completed successfully: ${toolResult.result.message}\n\n`;
         } else if (toolResult.error) {
             toolResultsText += `Tool execution for '${toolResult.toolCallId}' failed: ${toolResult.error}\n\n`;
         } else {
@@ -340,17 +438,57 @@ Original user request: ${originalPrompt}
 I have executed a tool call and retrieved the following information:
 ${toolResultsText}
 
-Now, please provide a focused response to the original user request using the information I've gathered. Analyze the content, answer their question concisely, and provide any key insights based on what you found. Also, inform the user about any actions they denied.`;
+Now, analyze the results. If the original request is fully addressed, provide a final, concise response. If more steps are needed, you can use tools again. For example, after reading a file, you might need to move it. Also, inform the user about any actions they denied.`;
 
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: followUpPrompt }] }]
+      contents: [{ role: 'user', parts: [{ text: followUpPrompt }] }],
+      tools: [{
+        functionDeclarations: [readFileFunction, readDirectoryFunction, getTreeFunction, moveItemFunction, createDirectoryFunction]
+      }]
     });
 
     const response = result.response;
+    const toolCalls: ToolCall[] = [];
+
+    // Check for function calls
+    const candidateFunctionCalls = response.functionCalls();
+    if (candidateFunctionCalls && candidateFunctionCalls.length > 0) {
+      for (const functionCall of candidateFunctionCalls) {
+        let description = '';
+        switch(functionCall.name) {
+          case 'read_file':
+            description = `Read file: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'read_directory':
+            description = `List contents of: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'get_tree':
+            description = `Get tree for: ${(functionCall.args as any)?.path || 'unknown path'}`;
+            break;
+          case 'move_item':
+            description = `Move item from ${ (functionCall.args as any)?.sourcePath } to ${ (functionCall.args as any)?.destinationPath }`;
+            break;
+          case 'create_directory':
+            description = `Create directory '${(functionCall.args as any)?.name}' in '${(functionCall.args as any)?.path}'`;
+            break;
+          default:
+            description = `Execute ${functionCall.name}`;
+        }
+        
+        const toolCall: ToolCall = {
+          id: generateToolCallId(),
+          type: functionCall.name as any,
+          parameters: functionCall.args as any,
+          description: description,
+          risk: determineRisk(functionCall.name, functionCall.args)
+        };
+        toolCalls.push(toolCall);
+      }
+    }
 
     return {
       response: response.text() || 'I have processed the tool results but cannot provide a response.',
-      toolCalls: undefined // Follow-up responses don't generate new tool calls
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
     };
   } catch (error) {
     console.error('Follow-up AI processing error:', error);
@@ -665,6 +803,105 @@ app.post('/api/ai/execute-tool', async (req, res) => {
             message: 'Directory listed successfully'
         }));
         break;
+
+      case 'get_tree': {
+        if (!toolCall.parameters.path) {
+          return res.json(createResponse(false, null, 'Path parameter is required for get_tree'));
+        }
+
+        const treeDirPath = toolCall.parameters.path;
+        let normalizedTreePath: string;
+        if (context?.currentPath && !path.isAbsolute(treeDirPath)) {
+          normalizedTreePath = path.resolve(context.currentPath, treeDirPath);
+        } else {
+          normalizedTreePath = path.resolve(treeDirPath);
+        }
+
+        if (!existsSync(normalizedTreePath)) {
+          return res.json(createResponse(false, null, `Directory does not exist: ${normalizedTreePath}`));
+        }
+
+        const treeDirStat = statSync(normalizedTreePath);
+        if (!treeDirStat.isDirectory()) {
+          return res.json(createResponse(false, null, 'Path is not a directory'));
+        }
+
+        const tree = await generateTree(normalizedTreePath);
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { tree, path: normalizedTreePath },
+          message: 'Directory tree generated successfully'
+        }));
+        break;
+      }
+
+      case 'move_item': {
+        const { sourcePath, destinationPath } = toolCall.parameters;
+
+        if (!sourcePath || !destinationPath) {
+          return res.json(createResponse(false, null, 'sourcePath and destinationPath are required for move_item'));
+        }
+
+        let normalizedSourcePath: string;
+        if (context?.currentPath && !path.isAbsolute(sourcePath)) {
+          normalizedSourcePath = path.resolve(context.currentPath, sourcePath);
+        } else {
+          normalizedSourcePath = path.resolve(sourcePath);
+        }
+
+        let normalizedDestinationPath: string;
+        if (context?.currentPath && !path.isAbsolute(destinationPath)) {
+          normalizedDestinationPath = path.resolve(context.currentPath, destinationPath);
+        } else {
+          normalizedDestinationPath = path.resolve(destinationPath);
+        }
+        
+        if (!existsSync(normalizedSourcePath)) {
+          return res.json(createResponse(false, null, `Source path does not exist: ${normalizedSourcePath}`));
+        }
+
+        let finalDestinationPath = normalizedDestinationPath;
+        // If destination is an existing directory, move the item inside it
+        if (existsSync(normalizedDestinationPath) && statSync(normalizedDestinationPath).isDirectory()) {
+            finalDestinationPath = path.join(normalizedDestinationPath, path.basename(normalizedSourcePath));
+        }
+        
+        await fs.rename(normalizedSourcePath, finalDestinationPath);
+
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { message: `Moved '${normalizedSourcePath}' to '${finalDestinationPath}'` },
+          message: 'Item moved successfully'
+        }));
+        break;
+      }
+
+      case 'create_directory': {
+        const { path: dirPath, name: folderName } = toolCall.parameters;
+
+        if (!dirPath || !folderName) {
+          return res.json(createResponse(false, null, 'path and name parameters are required for create_directory'));
+        }
+
+        let normalizedPath: string;
+        if (context?.currentPath && !path.isAbsolute(dirPath)) {
+          normalizedPath = path.resolve(context.currentPath, dirPath, folderName);
+        } else {
+          normalizedPath = path.resolve(dirPath, folderName);
+        }
+        
+        if (existsSync(normalizedPath)) {
+          return res.json(createResponse(false, null, `Directory already exists: ${normalizedPath}`));
+        }
+
+        await fs.mkdir(normalizedPath, { recursive: true });
+        res.json(createResponse(true, {
+          toolCallId: toolCall.id,
+          result: { message: `Directory '${folderName}' created at '${dirPath}'` },
+          message: 'Directory created successfully'
+        }));
+        break;
+      }
         
       default:
         res.json(createResponse(false, null, `Tool type '${toolCall.type}' not yet implemented`));
