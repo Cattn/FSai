@@ -345,3 +345,26 @@
         </div>
     {/if}
 </div>
+
+{#if !$chatVisible}
+    <div 
+        class="fixed bottom-6 right-6 z-[50]"
+        transition:fade={{ duration: 300, easing: quintOut }}
+    >
+        <div
+            class="flex items-center gap-2 px-4 py-3 rounded-full backdrop-blur-md shadow-lg cursor-pointer transition-all duration-200 ease-in-out hover:scale-105"
+            style="background: rgb(var(--m3-scheme-surface-container)); color: rgb(var(--m3-scheme-on-surface)); border: 1px solid rgb(var(--m3-scheme-outline-variant)); box-shadow: var(--m3-util-elevation-3);"
+            onclick={() => chatVisible.set(true)}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chatVisible.set(true); } }}
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" style="color: rgb(var(--m3-scheme-primary));">
+                <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+            </svg>
+            <span class="text-sm font-medium" style="color: rgb(var(--m3-scheme-on-surface));">
+                Press <kbd class="px-1.5 py-0.5 text-xs rounded" style="background: rgb(var(--m3-scheme-surface-container-high)); color: rgb(var(--m3-scheme-on-surface)); font-family: monospace;">Ctrl+K</kbd> to chat
+            </span>
+        </div>
+    </div>
+{/if}
