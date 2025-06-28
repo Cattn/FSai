@@ -55,7 +55,7 @@ Download a binary for your respective platform from the [Releases](https://githu
     default:
       return 'high';
 ```
-You can configure the agent to automatically run low-risk tools, which can greatly speed up actions.
+In the future, you can configure the agent to automatically run low-risk tools, which can greatly speed up actions.
 
 
 ### Gemeni API Usage
