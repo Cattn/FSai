@@ -1371,7 +1371,7 @@ app.post('/api/ai/execute-tool', aiLimiter, async (req, res) => {
 
         const supportedImageMimes = ['image/png', 'image/jpeg', 'image/webp'];
         const supportedPdfMimes = ['application/pdf'];
-        const supportedVideoMimes = ['video/x-flv', 'video/quicktime', 'video/mpeg', 'video/mp4', 'video/webm', 'video/wmv', 'video/3gpp'];
+        const supportedVideoMimes = ['video/x-flv', 'video/quicktime', 'video/mpeg', 'video/mp4', 'application/mp4', 'video/webm', 'video/wmv', 'video/3gpp']; // application mp4 is a true mac moment
         const isSupportedImage = supportedImageMimes.includes(mimeType);
         const isSupportedPdf = supportedPdfMimes.includes(mimeType);
         const isSupportedVideo = supportedVideoMimes.includes(mimeType);
