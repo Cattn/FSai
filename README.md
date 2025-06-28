@@ -62,7 +62,7 @@ In the future, you can configure the agent to automatically run low-risk tools, 
 
 
 ### Gemeni API Usage
-You need to provide your own Gemeni API key in settings. The free tier is acceptable for 90% of usage. 
+You need to provide your own Gemeni API key in settings. The free tier is perfectly fine for most usage (however if you want advanced & more data processing, a paid account may suit you better.)
 
 ### Issues
 This app should run perfectly fine on all platforms. If you encounter any issues, please create an [issue here](https://github.com/Cattn/FSai/issues/new)
