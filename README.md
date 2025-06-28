@@ -36,6 +36,9 @@ Download a binary for your respective platform from the [Releases](https://githu
 
 ## Notes:
 
+### Known Issue:
+Processing .mp4 files will not work properly on macOS (this is due to a quirk in macOS, and I haven't been able to take the time to fix it fully due to not owning a mac device.), the recommended solution is to remux them to another format.
+
 ### Tool "Risk":
 ```js
     case 'read_file':
