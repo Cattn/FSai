@@ -32,7 +32,7 @@ The agent can also make use of a variety of these tools in combination to fufill
 ## Installation
 
 Download a binary for your respective platform from the [Releases](https://github.com/Cattn/FSai/releases/latest) tab.
-
+> The macos aarch64 binary may say it's "damaged", if this happens, please try the x86 binary.
 
 ## Notes:
 
