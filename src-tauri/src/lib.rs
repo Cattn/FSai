@@ -74,13 +74,23 @@ async fn start_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn stop_backend(state: State<'_, AppState>) -> Result<(), String> {
+    let mut child_process = state.child_process.lock().unwrap();
+    if let Some(child) = child_process.take() {
+        child.kill().map_err(|e| format!("Failed to kill backend process: {}", e))?;
+        println!("Backend process terminated");
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![greet, start_backend, get_backend_port])
+        .invoke_handler(tauri::generate_handler![greet, start_backend, get_backend_port, stop_backend])
         .setup(|app| {
             let app_handle = app.handle().clone();
             
@@ -92,6 +102,22 @@ pub fn run() {
             });
             
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    let app_state = window.state::<AppState>();
+                    let mut child_process = app_state.child_process.lock().unwrap();
+                    if let Some(child) = child_process.take() {
+                        if let Err(e) = child.kill() {
+                            eprintln!("Failed to kill backend process on window close: {}", e);
+                        } else {
+                            println!("Backend process terminated on window close");
+                        }
+                    }
+                }
+                _ => {}
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
