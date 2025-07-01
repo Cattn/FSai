@@ -2,7 +2,7 @@
     <strong>FSai</strong>
 </h3>
 
-FSi allows you to explore, organize, and learn more about your files with a simple, file-manager based layout, and a clean chat UI. Smooth & responsive animations, quick responses, and relavent tool calls to complete tasks. 
+FSai allows you to explore, organize, and learn more about your files with a simple, file-manager based layout, and a clean chat UI. Smooth & responsive animations, quick responses, and relavent tool calls to complete tasks. 
 
 ### Showcases
 
