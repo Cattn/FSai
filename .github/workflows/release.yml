@@ -66,35 +66,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pguyot/arm-runner-action@v2.5.2
+      - uses: pguyot/arm-runner-action@v2.6.5
         with:
-          base_image: https://dietpi.com/downloads/images/DietPi_RPi-ARMv8-Bullseye.img.xz
+          base_image: raspios_lite_arm64:latest
           cpu: cortex-a53
           bind_mount_repository: true
-          image_additional_mb: 10240
+          image_additional_mb: 12288
           optimize_image: false
           commands: |
             # Rust complains (rightly) that $HOME doesn't match eid home
             export HOME=/root
             # Workaround to CI worker being stuck on Updating crates.io index
             export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-            # Install setup prerequisites
-            apt-get update -y --allow-releaseinfo-change
-            apt-get upgrade -y
-            apt-get autoremove -y
-            apt-get install curl -y
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            . "$HOME/.cargo/env"
-            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-            # Install framework specific packages
+            
+            # Update package lists and install prerequisites
+            apt-get update -y
+            apt-get install -y curl wget gnupg2 software-properties-common apt-transport-https ca-certificates
+            
+            # Install Node.js
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
             apt-get install -y nodejs
-            # Install build tools and tauri-cli requirements
-            apt-get install -y libwebkit2gtk-4.0-dev build-essential wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-            cargo install tauri-cli
+            
+            # Install Rust
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            . "$HOME/.cargo/env"
+            
+            # Install build dependencies for Tauri
+            apt-get install -y \
+              build-essential \
+              libwebkit2gtk-4.0-dev \
+              libssl-dev \
+              libgtk-3-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev \
+              pkg-config
+            
+            # Install tauri-cli
+            cargo install tauri-cli --locked
+            
             # Install frontend dependencies
             npm install
+            
             # Install backend dependencies
             npm install --prefix src-tauri/backend
+            
             # Build the application (only deb bundle for ARM to avoid AppImage issues)
             cargo tauri build --bundles deb
 
